@@ -4,3 +4,6 @@ episodes/
 results.json
 checkpoints/
 .venv/
+setup/*.log
+setup/frame*.png
+reference/episodes/
