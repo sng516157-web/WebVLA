@@ -138,8 +138,14 @@ class LiberoWrapper:
         return self.obs(), reward, done, info
 
     def render(self, camera_name="agentview"):
-        """HWC uint8, rotated 180 to be upright (same orientation the policy sees)."""
+        """HWC uint8, rotated 180 to be upright (same orientation the policy sees).
+
+        Accepts policy key ("image_primary"), sim key ("agentview_image"), or
+        bare camera name ("agentview").
+        """
         key = SIM_CAMERA_KEYS.get(camera_name, camera_name)
+        if key not in self._raw and f"{key}_image" in self._raw:
+            key = f"{key}_image"
         return _rotate180(self._raw[key]).copy()
 
     def obs(self):

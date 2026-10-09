@@ -1,11 +1,19 @@
 #!/bin/bash
+# Unconditionally clear execstack on every jaxlib .so (some lack PT_GNU_STACK,
+# which patchelf --print-execstack reports as empty and the selective loop missed).
+set -uo pipefail
 SP=/root/webvla/venv/lib/python3.10/site-packages
-F="$SP/jaxlib/xla_extension.so"
-echo "=== GNU_STACK before ==="
-readelf -lW "$F" | grep -i stack || echo "(no GNU_STACK segment)"
-echo "=== patchelf ==="
-patchelf --clear-execstack "$F"; echo "patchelf exit=$?"
-echo "=== GNU_STACK after ==="
-readelf -lW "$F" | grep -i stack || echo "(no GNU_STACK segment)"
-echo "=== import test ==="
-/root/webvla/venv/bin/python -c "import jax; print('jax ok:', jax.__version__); print(jax.devices())"
+find "$SP/jaxlib" -name "*.so" | while read -r f; do
+  patchelf --clear-execstack "$f" 2>/dev/null && echo "patched: $f" || echo "skip: $f"
+done
+PY=/root/webvla/venv/bin/python
+$PY -c "
+import jax
+from jaxlib.cuda import _prng
+import jax.numpy as jnp
+k = jax.random.PRNGKey(0)
+a, b = jax.random.split(k)
+print('GPU split ok:', a, b)
+print(jax.devices())
+"
+echo "PRNG_FIX_DONE"
