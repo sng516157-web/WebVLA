@@ -21,7 +21,8 @@ def main():
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     p.add_argument("--checkpoint", default="hf://rail-berkeley/octo-base-1.5")
     p.add_argument("--exec-horizon", type=int, default=4)
-    p.add_argument("--window-size", type=int, default=2)
+    p.add_argument("--window-size", type=int, default=None,
+                   help="None = infer from checkpoint example_batch (1 for finetuned)")
     p.add_argument("--out-dir", default="episodes")
     p.add_argument("--results", default="results.json")
     p.add_argument("--reference", default="reference/reference_results.json")

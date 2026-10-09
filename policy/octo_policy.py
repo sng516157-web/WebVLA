@@ -30,7 +30,7 @@ UNNORM_KEY_PREFERENCE = [
 
 
 class OctoPolicy:
-    def __init__(self, checkpoint=DEFAULT_CHECKPOINT, window_size=2, unnorm_key=None):
+    def __init__(self, checkpoint=DEFAULT_CHECKPOINT, window_size=None, unnorm_key=None):
         import tensorflow as tf
 
         tf.config.set_visible_devices([], "GPU")  # reserve the GPU for JAX
@@ -40,8 +40,13 @@ class OctoPolicy:
         from octo.utils.train_callbacks import supply_rng
 
         self.checkpoint = checkpoint
-        self.window_size = window_size
         self.model = OctoModel.load_pretrained(checkpoint)
+
+        # Infer the history window from the checkpoint's example_batch unless
+        # overridden: image_primary has shape (batch, window, H, W, C).
+        if window_size is None:
+            window_size = int(self.model.example_batch["observation"]["image_primary"].shape[1])
+        self.window_size = window_size
 
         stats = self.model.dataset_statistics
         if unnorm_key is not None:
@@ -58,6 +63,15 @@ class OctoPolicy:
                     f"No suitable action statistics key. Available: {sorted(stats.keys())}"
                 )
         unnorm_stats = stats[self.unnorm_key]["action"] if self.unnorm_key != "action" else stats["action"]
+
+        # Proprio normalization (mirrors NormalizeProprio in 03_eval_finetuned.py):
+        # only if the checkpoint actually consumes proprio and stats exist.
+        self._proprio_stats = None
+        model_uses_proprio = "proprio" in self.model.example_batch["observation"]
+        proprio_stats = stats.get("proprio") or stats.get(self.unnorm_key, {}).get("proprio")
+        if model_uses_proprio and proprio_stats is not None:
+            self._proprio_stats = {k: np.asarray(v) for k, v in proprio_stats.items()}
+        self.model_uses_proprio = model_uses_proprio
 
         # octo's official eval recipe (03_eval_finetuned.py)
         self._policy_fn = supply_rng(
@@ -86,6 +100,10 @@ class OctoPolicy:
         from octo.utils.gym_wrappers import stack_and_pad
 
         obs = {k: v for k, v in obs.items() if isinstance(v, np.ndarray)}
+        if self._proprio_stats is not None and "proprio" in obs:
+            obs["proprio"] = (
+                (obs["proprio"] - self._proprio_stats["mean"]) / self._proprio_stats["std"]
+            ).astype(np.float32)
         if self._num_obs == 0:
             # HistoryWrapper.reset semantics: pad with copies of the first obs.
             self._history.extend([obs] * self.window_size)

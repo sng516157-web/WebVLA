@@ -28,7 +28,8 @@ def main():
     p.add_argument("--checkpoint", default="hf://rail-berkeley/octo-base-1.5")
     p.add_argument("--exec-horizon", type=int, default=4,
                    help="replan interval: steps of the predicted chunk executed open-loop")
-    p.add_argument("--window-size", type=int, default=2)
+    p.add_argument("--window-size", type=int, default=None,
+                   help="history window; default: infer from checkpoint example_batch")
     p.add_argument("--out-dir", default="reference")
     args = p.parse_args()
 
