@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+episodes/
+results.json
+checkpoints/
+.venv/
