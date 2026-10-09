@@ -15,7 +15,7 @@ Conventions (matching how LIBERO demos are consumed by VLA training pipelines):
 
 Usage (WSL):
   bash setup/run.sh tools/convert_libero_to_rlds.py --suite libero_spatial
-Output: /root/webvla/rlds_datasets/<suite>/1.0.0/...
+Output: /root/webvla/rlds_datasets/libero_rlds/1.0.0/...
 """
 
 import argparse

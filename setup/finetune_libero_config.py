@@ -26,7 +26,7 @@ def get_config(config_string="full,language_conditioned"):
     config.pretrained_path = "hf://rail-berkeley/octo-base-1.5"
 
     config.dataset_kwargs = dict(
-        name="libero_spatial",
+        name="libero_rlds",  # tfds builder class LiberoRlds -> dataset name
         data_dir="/root/webvla/rlds_datasets",
         image_obs_keys={"primary": "image", "wrist": "wrist_image"},
         proprio_obs_key="state",
