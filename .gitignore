@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 episodes/
-results.json
+# results.json is committed on purpose: it is the step-4 deliverable record
 checkpoints/
 .venv/
 setup/*.log

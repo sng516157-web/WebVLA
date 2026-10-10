@@ -23,7 +23,8 @@ def main():
     p.add_argument("--exec-horizon", type=int, default=4)
     p.add_argument("--window-size", type=int, default=None,
                    help="None = infer from checkpoint example_batch (1 for finetuned)")
-    p.add_argument("--out-dir", default="episodes")
+    p.add_argument("--out-dir", default=".",
+                   help="run_grid appends 'episodes/' itself; '.' -> ./episodes/")
     p.add_argument("--results", default="results.json")
     p.add_argument("--reference", default="reference/reference_results.json")
     args = p.parse_args()
