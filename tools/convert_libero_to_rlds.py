@@ -14,17 +14,21 @@ Conventions (matching how LIBERO demos are consumed by VLA training pipelines):
     stored in the hdf5 env_args (fallback: filename heuristic)
 
 Usage (WSL):
-  bash setup/run.sh tools/convert_libero_to_rlds.py --suite libero_spatial
-Output: /root/webvla/rlds_datasets/libero_rlds/1.0.0/...
+  bash setup/run.sh -m tools.convert_libero_to_rlds --suite libero_spatial
+Output: $WEBVLA_RLDS/libero_rlds/1.0.0/...   (see paths.py)
 """
 
 import argparse
 import glob
 import json
 import os
+import sys
 
 import h5py
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from paths import RLDS_DIR, libero_datasets_dir
 
 
 def build_language_map(suite_name):
@@ -102,7 +106,7 @@ def make_builder(suite_name):
 
         def _split_generators(self, dl_manager):
             files = sorted(
-                glob.glob(f"/root/webvla/LIBERO/libero/datasets/{suite_name}/*.hdf5")
+                glob.glob(os.path.join(libero_datasets_dir(suite_name), "*.hdf5"))
             )
             assert files, f"no hdf5 files found for suite {suite_name}"
             return {"train": self._generate_examples(files), "val": self._generate_examples(files)}
@@ -157,7 +161,7 @@ def make_builder(suite_name):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--suite", default="libero_spatial")
-    p.add_argument("--out", default="/root/webvla/rlds_datasets")
+    p.add_argument("--out", default=RLDS_DIR)
     args = p.parse_args()
 
     builder_cls = make_builder(args.suite)

@@ -1,8 +1,15 @@
+import glob
+import os
+import sys
+
 import h5py
 import json
 import numpy as np
 
-path = "/root/webvla/LIBERO/libero/datasets/libero_spatial/pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate_demo.hdf5"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from paths import libero_datasets_dir
+
+path = sorted(glob.glob(os.path.join(libero_datasets_dir("libero_spatial"), "*.hdf5")))[0]
 f = h5py.File(path, "r")
 
 

@@ -1,7 +1,8 @@
 #!/bin/bash
-cd /mnt/c/Users/sng51/Desktop/WebVLA
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export MUJOCO_GL=egl
-/root/webvla/venv/bin/python - <<'EOF'
+$WEBVLA_HOME/venv/bin/python - <<'EOF'
 import numpy as np
 import tensorflow as tf
 tf.config.set_visible_devices([], "GPU")

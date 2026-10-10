@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
-source /root/webvla-env.sh
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+WEBVLA_ENV_FILE=${WEBVLA_ENV_FILE:-$HOME/webvla-env.sh}
+[ -f "$WEBVLA_ENV_FILE" ] && source "$WEBVLA_ENV_FILE" || true
 source /root/.local/bin/env
-PY=/root/webvla/venv/bin/python
+PY=$WEBVLA_HOME/venv/bin/python
 
 uv pip install --python $PY "numpy==1.24.3"
 

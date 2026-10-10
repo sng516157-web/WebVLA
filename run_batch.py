@@ -3,8 +3,8 @@
 Prints per-task success rates next to the step-1 reference numbers
 (reference/reference_results.json, if present).
 
-Run inside WSL:
-  MUJOCO_GL=osmesa /root/webvla/venv/bin/python run_batch.py
+Run:
+  bash setup/run.sh run_batch.py            # or: MUJOCO_GL=osmesa bash setup/run.sh run_batch.py
 """
 
 import argparse

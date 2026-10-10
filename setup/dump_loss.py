@@ -2,10 +2,12 @@
 """Dump training loss history from the offline wandb run's local datastore."""
 import glob
 import json
+import os
 
 from wandb.sdk.internal.datastore import DataStore
 
-run = sorted(glob.glob("/root/webvla/octo/wandb/offline-run-*libero_spatial_bs16_lr5e5*"))[-1]
+octo_dir = os.environ.get("WEBVLA_OCTO", "/root/webvla/octo")
+run = sorted(glob.glob(f"{octo_dir}/wandb/offline-run-*libero_spatial_bs16_lr5e5*"))[-1]
 ds = DataStore()
 ds.open_for_scan(glob.glob(f"{run}/*.wandb")[0])
 

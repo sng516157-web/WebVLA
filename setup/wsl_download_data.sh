@@ -1,7 +1,9 @@
 #!/bin/bash
 set -uo pipefail
-source /root/webvla-env.sh
-DST=/root/webvla/LIBERO/libero/datasets/libero_spatial
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+WEBVLA_ENV_FILE=${WEBVLA_ENV_FILE:-$HOME/webvla-env.sh}
+[ -f "$WEBVLA_ENV_FILE" ] && source "$WEBVLA_ENV_FILE" || true
+DST=$WEBVLA_HOME/LIBERO/libero/datasets/libero_spatial
 mkdir -p "$DST"
 BASE=https://huggingface.co/datasets/yifengzhu-hf/LIBERO-datasets/resolve/main/libero_spatial
 

@@ -1,3 +1,4 @@
+import os
 import sys
 from absl import app, flags
 from ml_collections import config_flags
@@ -5,7 +6,7 @@ from ml_collections import config_flags
 FLAGS = flags.FLAGS
 config_flags.DEFINE_config_file(
     "config",
-    "/mnt/c/Users/sng51/Desktop/WebVLA/setup/finetune_libero_config.py",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "finetune_libero_config.py"),
     "config",
     lock_config=False,
 )

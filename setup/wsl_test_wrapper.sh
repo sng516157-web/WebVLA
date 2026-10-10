@@ -1,6 +1,7 @@
 #!/bin/bash
-cd /mnt/c/Users/sng51/Desktop/WebVLA
-MUJOCO_GL=osmesa /root/webvla/venv/bin/python - <<'EOF'
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MUJOCO_GL=osmesa $WEBVLA_HOME/venv/bin/python - <<'EOF'
 import numpy as np
 from sim.wrapper import LiberoWrapper
 from runner.run_episode import run_episode_frames, run_and_save

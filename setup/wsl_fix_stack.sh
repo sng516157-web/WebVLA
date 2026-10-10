@@ -1,12 +1,14 @@
 #!/bin/bash
 set -euo pipefail
-source /root/webvla-env.sh
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+WEBVLA_ENV_FILE=${WEBVLA_ENV_FILE:-$HOME/webvla-env.sh}
+[ -f "$WEBVLA_ENV_FILE" ] && source "$WEBVLA_ENV_FILE" || true
 source /root/.local/bin/env
-PY=/root/webvla/venv/bin/python
-SP=/root/webvla/venv/lib/python3.10/site-packages
+PY=$WEBVLA_HOME/venv/bin/python
+SP=$WEBVLA_HOME/venv/lib/python3.10/site-packages
 
 # Fix broken editable mapping for libero (uv/setuptools PEP660 produced empty MAPPING).
-echo "/root/webvla/LIBERO" > "$SP/libero-repo.pth"
+echo "$WEBVLA_HOME/LIBERO" > "$SP/libero-repo.pth"
 
 # cudnn 8.9 required by jaxlib 0.4.20+cuda12.cudnn89 (cudnn 9 has different soname).
 uv pip install --python $PY "nvidia-cudnn-cu12==8.9.2.26"

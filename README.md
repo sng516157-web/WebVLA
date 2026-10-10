@@ -6,6 +6,9 @@ no web server, no UI, no Docker.
 
 ## Layout
 
+- `paths.py` — **all machine-specific paths live here**, overridable via
+  `WEBVLA_HOME`, `WEBVLA_LIBERO`, `WEBVLA_OCTO`, `WEBVLA_VENV`, `WEBVLA_RLDS`,
+  `WEBVLA_CKPTS` env vars (defaults match the original install: `/root/webvla/...`)
 - `sim/wrapper.py` — thin LIBERO env wrapper: `reset(task_id, seed)`, `step(action)`,
   `render(camera_name) -> HWC uint8`, `obs() -> dict` (policy-keyed images, proprio, instruction)
 - `policy/octo_policy.py` — Octo checkpoint loading + windowed action-chunk prediction
@@ -13,14 +16,14 @@ no web server, no UI, no Docker.
 - `runner/batch.py` — shared grid runner, sanity check, aggregation
 - `reference_eval.py` — step 1: reference validation (2 tasks × 3 episodes)
 - `run_batch.py` — step 4: batch run (3 tasks × 5 seeds) → `episodes/`, `results.json`
-- `setup/` — WSL2 environment bootstrap scripts
+- `setup/` — environment bootstrap scripts (all honor the `WEBVLA_*` overrides)
 
-## Environment (this machine)
+## Environment (original machine)
 
 The stack runs inside **WSL2 Ubuntu 26.04** — native Windows is not viable
-(JAX CUDA wheels are Linux-only). Third-party code lives in WSL at
-`/root/webvla/{LIBERO,octo}` (pinned: LIBERO master @ 8f1084e, octo main @ 241fb35);
-this repo is accessed at `/mnt/c/Users/sng51/Desktop/WebVLA`.
+(JAX CUDA wheels are Linux-only); any Linux box with a CUDA GPU should work.
+Third-party code is pinned: LIBERO master @ 8f1084e, octo main @ 241fb35,
+checked out under `$WEBVLA_HOME` (default `/root/webvla/{LIBERO,octo}`).
 
 Pinned core versions (verified on disk):
 
@@ -45,35 +48,44 @@ Platform fixes applied (documented, no dep changes):
 - `nvidia-cudnn-cu12==8.9.2.26` forced — jax's `cuda12_pip` extra allows cudnn≥8.9
   and resolves to 9.x, which jaxlib 0.4.20 (cudnn89 build) cannot load.
 - LIBERO editable install replaced by a `.pth` (PEP 660 mapping came out empty).
-- WSL networking: Windows proxy at `127.0.0.1:19828` is reachable via WSL
-  VirtioProxy localhost forwarding; `setup/run.sh` exports it.
+- WSL networking (original machine only): a Windows proxy was reachable via
+  WSL VirtioProxy localhost forwarding. If you are behind a proxy, write your
+  own `http_proxy`/`https_proxy` exports to `$HOME/webvla-env.sh` — all setup
+  scripts source it if present (optional; not needed on a direct connection).
 - Headless rendering: `MUJOCO_GL=egl` verified working (OSMesa verified as fallback;
   use `MUJOCO_GL=osmesa bash setup/run.sh ...`).
 
 ## How to run
 
+All commands run **inside Linux** (WSL2 or native) with the repo as CWD —
+`setup/run.sh` locates the repo from its own path, sets `PYTHONPATH`, activates
+the venv at `$WEBVLA_VENV`, and exports `MUJOCO_GL=egl`. Set the `WEBVLA_*`
+env vars first if your third-party install is not at `/root/webvla`.
+
 ```bash
-# one-time setup (inside WSL, as root)
+# one-time setup (as root on a fresh WSL2/Linux box)
 bash setup/wsl_setup_env.sh && bash setup/wsl_post_install.sh \
   && bash setup/wsl_fix_stack.sh && bash setup/wsl_fix_execstack.sh \
   && bash setup/wsl_fix_numpy.sh && bash setup/wsl_fix2.sh
 
 # reference validation (2 tasks x 3 episodes; --checkpoint defaults to octo-base)
-wsl -d Ubuntu -- bash /mnt/c/Users/sng51/Desktop/WebVLA/setup/run.sh reference_eval.py \
-  --checkpoint /root/webvla/octo_ckpts/octo_finetune/libero_spatial/libero_spatial_bs16_lr5e5_20261010_114251 \
+bash setup/run.sh reference_eval.py \
+  --checkpoint $WEBVLA_CKPTS/octo_finetune/libero_spatial/<your_finetune_run> \
   --out-dir reference/ft50000
 
 # batch (3 tasks x 5 seeds) -> episodes/ + results.json
-wsl -d Ubuntu -- bash /mnt/c/Users/sng51/Desktop/WebVLA/setup/run.sh run_batch.py \
-  --checkpoint /root/webvla/octo_ckpts/octo_finetune/libero_spatial/libero_spatial_bs16_lr5e5_20261010_114251 \
+bash setup/run.sh run_batch.py \
+  --checkpoint $WEBVLA_CKPTS/octo_finetune/libero_spatial/<your_finetune_run> \
   --reference reference/ft50000/reference_results.json
 
 # fine-tune from scratch (~5h): downloads dataset, converts to RLDS, trains
 bash setup/wsl_download_data.sh   # libero_spatial hdf5s (curl resume)
-wsl -d Ubuntu -- bash /mnt/c/Users/sng51/Desktop/WebVLA/setup/run.sh \
-  -m tools.convert_libero_to_rlds --suite libero_spatial
-wsl -d Ubuntu -- bash /mnt/c/Users/sng51/Desktop/WebVLA/setup/run_finetune.sh
+bash setup/run.sh -m tools.convert_libero_to_rlds --suite libero_spatial
+bash setup/run_finetune.sh
 ```
+
+On Windows, prefix each command with
+`wsl -d Ubuntu --` and use the repo's `/mnt/c/...` path for the script.
 
 ## Results
 
@@ -126,7 +138,7 @@ octo-base zero-shot scored 0/6 — published LIBERO numbers are for the
    except batch 256→16 (12GB VRAM), **lr peak 3e-4→5e-5** (see below),
    warmup 500, 50k steps, shuffle buffer 500 + 6 frame threads (host RAM).
 3. Run: `bash setup/run_finetune.sh` (~5h at ~2.5 it/s on the 4080 Laptop;
-   checkpoints every 5k in `/root/webvla/octo_ckpts/...`).
+   checkpoints every 5k in `$WEBVLA_CKPTS/octo_finetune/...`).
 
 **The LR finding (documented deviation):** octo's default peak LR 3e-4 is
 tuned for batch 256; at batch 16 the run diverged — action-prediction MSE on

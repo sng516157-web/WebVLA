@@ -1,5 +1,6 @@
 #!/bin/bash
-PY=/root/webvla/venv/bin/python
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+PY=$WEBVLA_HOME/venv/bin/python
 $PY - <<'EOF'
 import traceback
 for mod in ["jaxlib.cuda_plugin_extension", "jaxlib.cuda._prng", "jaxlib.gpu_prng", "jaxlib.gpu_common_utils"]:

@@ -15,14 +15,16 @@ Everything else (full finetune, window_size 1, action_horizon 4, augmentation,
 resize 256/128) is the octo default.
 
 Usage (WSL):
-  cd /root/webvla/octo && python scripts/finetune.py \
-    --config=/mnt/c/Users/sng51/Desktop/WebVLA/setup/finetune_libero_config.py \
-    --name=libero_spatial_bs16 --debug
+  bash setup/run_finetune.sh   (resolves paths via paths.py / WEBVLA_* env vars)
 """
 
+import os
 import sys
 
-sys.path.insert(0, "/root/webvla/octo")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from paths import CKPTS_DIR, OCTO_DIR, RLDS_DIR
+
+sys.path.insert(0, OCTO_DIR)
 
 from scripts.configs.finetune_config import get_config as _base_get_config
 
@@ -34,7 +36,7 @@ def get_config(config_string="full,language_conditioned"):
 
     config.dataset_kwargs = dict(
         name="libero_rlds",  # tfds builder class LiberoRlds -> dataset name
-        data_dir="/root/webvla/rlds_datasets",
+        data_dir=RLDS_DIR,
         image_obs_keys={"primary": "image", "wrist": "wrist_image"},
         proprio_obs_key="state",
         language_key="language_instruction",
@@ -54,7 +56,7 @@ def get_config(config_string="full,language_conditioned"):
     config.optimizer.learning_rate.decay_steps = 50000
     config.save_interval = 5000
     config.eval_interval = 5000
-    config.save_dir = "/root/webvla/octo_ckpts"
+    config.save_dir = CKPTS_DIR
 
     config.viz_kwargs.eval_batch_size = 32
     config.viz_kwargs.trajs_for_metrics = 50

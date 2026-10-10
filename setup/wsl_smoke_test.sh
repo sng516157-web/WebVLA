@@ -1,7 +1,9 @@
 #!/bin/bash
 # Smoke-test the WSL stack: imports, JAX CUDA, MuJoCo GL backends, LIBERO env.
-source /root/webvla-env.sh
-PY=/root/webvla/venv/bin/python
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+WEBVLA_ENV_FILE=${WEBVLA_ENV_FILE:-$HOME/webvla-env.sh}
+[ -f "$WEBVLA_ENV_FILE" ] && source "$WEBVLA_ENV_FILE" || true
+PY=$WEBVLA_HOME/venv/bin/python
 
 echo "=== 1. core imports ==="
 $PY - <<'EOF'

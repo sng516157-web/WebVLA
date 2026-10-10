@@ -9,7 +9,7 @@ import sys
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-sys.path.insert(0, "/mnt/c/Users/sng51/Desktop/WebVLA")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import tensorflow as tf
@@ -18,15 +18,16 @@ tf.config.set_visible_devices([], "GPU")
 
 import tensorflow_datasets as tfds
 import cv2
+from paths import CKPTS_DIR, RLDS_DIR
 from policy.octo_policy import OctoPolicy
 
 CKPT = sys.argv[1] if len(sys.argv) > 1 else \
-    "/root/webvla/octo_ckpts/octo_finetune/libero_spatial/libero_spatial_bs16_20261010_023740"
+    os.environ.get("WEBVLA_FT_CKPT", CKPTS_DIR)
 policy = OctoPolicy(checkpoint=CKPT)
 print("window_size:", policy.window_size, "unnorm_key:", policy.unnorm_key,
       "proprio_norm:", policy._proprio_stats is not None)
 
-ds = tfds.load("libero_rlds", data_dir="/root/webvla/rlds_datasets", split="val")
+ds = tfds.load("libero_rlds", data_dir=RLDS_DIR, split="val")
 
 all_sq, n = 0.0, 0
 trace_printed = False

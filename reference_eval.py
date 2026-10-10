@@ -9,8 +9,8 @@ script is the reference implementation: environment side follows the standard
 LIBERO eval harness conventions (openvla/openvla experiments/robot/libero),
 policy side follows octo's official examples/03_eval_finetuned.py verbatim.
 
-Run inside WSL:
-  MUJOCO_GL=osmesa /root/webvla/venv/bin/python reference_eval.py
+Run:
+  bash setup/run.sh reference_eval.py       # or: MUJOCO_GL=osmesa bash setup/run.sh reference_eval.py
 """
 
 import argparse

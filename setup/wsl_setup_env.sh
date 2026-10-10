@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bootstrap the WebVLA M0 environment inside WSL2 Ubuntu.
-# - Python 3.10 venv at /root/webvla/venv (via uv-managed CPython)
+# - Python 3.10 venv at $WEBVLA_HOME/venv (via uv-managed CPython)
 # - LIBERO pinned sim stack (robosuite==1.4.0, mujoco==2.3.2) + Octo stack (jax[cuda12]==0.4.20, flax==0.7.5)
 #
 # Documented deviations from LIBERO requirements.txt (forced by hard conflicts, sim stack untouched):
@@ -9,12 +9,14 @@
 #   transformers not installed (LIBERO training-only dep; octo eval path does not import it)
 #   robomimic/wandb/torch not installed (LIBERO training-only deps)
 set -euo pipefail
-source /root/webvla-env.sh
+WEBVLA_HOME=${WEBVLA_HOME:-/root/webvla}
+WEBVLA_ENV_FILE=${WEBVLA_ENV_FILE:-$HOME/webvla-env.sh}
+[ -f "$WEBVLA_ENV_FILE" ] && source "$WEBVLA_ENV_FILE" || true
 source /root/.local/bin/env
 
-PY=/root/webvla/venv/bin/python
+PY=$WEBVLA_HOME/venv/bin/python
 
-uv venv /root/webvla/venv --python 3.10
+uv venv $WEBVLA_HOME/venv --python 3.10
 
 # --- LIBERO pinned sim stack ---
 uv pip install --python $PY \
@@ -31,7 +33,7 @@ uv pip install --python $PY \
   imageio imageio-ffmpeg \
   h5py
 
-uv pip install --python $PY --no-deps -e /root/webvla/LIBERO
+uv pip install --python $PY --no-deps -e $WEBVLA_HOME/LIBERO
 
 # --- Octo stack ---
 uv pip install --python $PY "jax[cuda12_pip]==0.4.20" \
@@ -50,7 +52,7 @@ uv pip install --python $PY \
   huggingface_hub
 
 # --- dlimp (pinned commit; git protocol is blocked by proxy, use tarball) ---
-cd /root/webvla
+cd "$WEBVLA_HOME"
 if [ ! -d dlimp-src ]; then
   curl -sL https://codeload.github.com/kvablack/dlimp/tar.gz/5edaa4691567873d495633f2708982b42edf1972 -o dlimp.tar.gz
   tar xzf dlimp.tar.gz
@@ -59,6 +61,6 @@ if [ ! -d dlimp-src ]; then
 fi
 uv pip install --python $PY ./dlimp-src
 
-uv pip install --python $PY --no-deps -e /root/webvla/octo
+uv pip install --python $PY --no-deps -e $WEBVLA_HOME/octo
 
 echo "SETUP_DONE"
