@@ -132,6 +132,21 @@ async def list_episodes():
     return {"episodes": out}
 
 
+@app.get("/tasks")
+async def list_tasks():
+    """Task list for the UI dropdown, from the worker's loaded benchmark."""
+    worker = app.state.worker
+    if worker.env is None:
+        return {"ready": False, "tasks": []}
+    return {
+        "ready": True,
+        "tasks": [
+            {"task_id": i, "language": t.language}
+            for i, t in enumerate(worker.env.benchmark.tasks)
+        ],
+    }
+
+
 @app.get("/healthz")
 async def healthz():
     worker = app.state.worker
