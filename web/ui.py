@@ -19,7 +19,15 @@ API_BASE = os.environ.get(
     "WEBVLA_API_BASE", "http://127.0.0.1:" + os.environ.get("WEBVLA_PORT", "7860")
 )
 EPISODES_DIR = os.path.join(paths.REPO_ROOT, "episodes")
+SCENES_DIR = os.path.join(paths.REPO_ROOT, "assets", "scenes")
 M0_VALIDATED_TASKS = {0, 1, 2}
+
+
+def _scene_img(task_id):
+    if task_id is None:
+        return None
+    p = os.path.join(SCENES_DIR, f"task{int(task_id)}.png")
+    return p if os.path.exists(p) else None
 
 GALLERY_HEADERS = ["task", "seed", "success", "custom", "steps", "wall s", "lat ms", "date (UTC)", "job", "file"]
 
@@ -180,19 +188,30 @@ def build_gradio():
         tick_state = gr.State(0)
 
         with gr.Row():
-            task_dd = gr.Dropdown(
-                label="LIBERO task (scene)", choices=_task_choices(), scale=4
-            )
-            seed_in = gr.Number(label="seed (init layout = seed % 50)", value=0,
-                                precision=0, scale=1)
-            run_btn = gr.Button("Run episode", variant="primary", scale=1)
-
-        custom_in = gr.Textbox(
-            label="Custom instruction (optional) — same scene, your words; "
-                  "result is UNCHECKED since the success checker belongs to the original task",
-            placeholder="e.g. pick up the ramekin and place it on the plate",
-            max_lines=1,
-        )
+            with gr.Column(scale=3):
+                with gr.Row():
+                    task_dd = gr.Dropdown(
+                        label="LIBERO task (scene)", choices=_task_choices(),
+                        value=0, scale=4,
+                    )
+                    seed_in = gr.Number(label="seed (init layout = seed % 50)",
+                                        value=0, precision=0, scale=1)
+                    run_btn = gr.Button("Run episode", variant="primary", scale=1)
+                custom_in = gr.Textbox(
+                    label="Custom instruction (optional) — same scene, your words",
+                    placeholder="e.g. pick up the ramekin and place it on the plate",
+                    max_lines=1,
+                )
+                gr.Markdown(
+                    "*Note: the policy was fine-tuned on only the 10 scene "
+                    "instructions above, so custom phrasings often degrade to the "
+                    "scene's default behavior — that generalization gap is part of "
+                    "what this demo shows. Custom runs are UNCHECKED (the success "
+                    "checker belongs to the original task). Reference the objects "
+                    "you can see in the scene preview for the best shot.*"
+                )
+            scene_img = gr.Image(value=_scene_img(0), label="scene preview",
+                                 height=280, width=280, interactive=False, scale=1)
 
         status_md = gr.Markdown("idle — submit a job")
         stats_md = gr.Markdown("")
@@ -206,6 +225,7 @@ def build_gradio():
         )
 
         run_btn.click(submit, [task_dd, seed_in, custom_in], [job_state, status_md, video])
+        task_dd.change(_scene_img, task_dd, scene_img)
 
         timer = gr.Timer(2)
         timer.tick(

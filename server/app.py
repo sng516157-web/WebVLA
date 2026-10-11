@@ -171,7 +171,8 @@ if os.environ.get("WEBVLA_NO_UI") != "1":
         from web.ui import build_gradio
 
         app = gr.mount_gradio_app(
-            app, build_gradio(), path="/", allowed_paths=[EPISODES_DIR]
+            app, build_gradio(), path="/",
+            allowed_paths=[EPISODES_DIR, os.path.join(paths.REPO_ROOT, "assets")],
         )
     except ImportError:
         print("[server] gradio not installed — API-only mode")

@@ -19,7 +19,7 @@ STAGING = os.path.join(REPO, "deploy", "_staging")
 SPACE_NAME = os.environ.get("WEBVLA_SPACE_NAME", "webvla-libero-octo")
 
 # what the Space needs: runtime code only (no setup/, episodes/, results)
-COPY_DIRS = ["server", "web", "runner", "sim", "policy"]
+COPY_DIRS = ["server", "web", "runner", "sim", "policy", "assets"]
 COPY_FILES = ["app.py", "paths.py"]
 RENAMES = {
     "requirements-space.txt": "requirements.txt",
