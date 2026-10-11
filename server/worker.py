@@ -23,8 +23,8 @@ from datetime import datetime, timezone
 
 from runner.batch import build_stack
 from runner.run_episode import run_and_save
+from server.custom_env import CustomInstructionWrapper
 from server.jobs import STATUS_DONE, STATUS_FAILED, STATUS_RUNNING, JobStore
-from sim.wrapper import LiberoWrapper
 
 
 class Worker:
@@ -45,6 +45,9 @@ class Worker:
         """Blocking: construct env + policy, then JIT-warm one replan."""
         t0 = time.time()
         self.env, self.policy = build_stack(self.suite, self.checkpoint)
+        # Same-layout subclass swap: keeps build_stack verbatim while enabling
+        # per-job custom instructions (M0 code untouched).
+        self.env.__class__ = CustomInstructionWrapper
         obs = self.env.reset(0, 0)
         self.policy.reset(obs["instruction"])
         self.policy.act(self.env.obs())  # JIT compile; first call is slow
@@ -61,6 +64,11 @@ class Worker:
             "backend": self.backend,
             "checkpoint": self.checkpoint,
         }
+        self.env.custom_instruction = job.instruction
+        if job.instruction:
+            extra_meta["instruction_overridden"] = True
+            extra_meta["base_task_language"] = self.env.benchmark.get_task(
+                job.task_id).language
         try:
             result = run_and_save(
                 self.env, self.policy, self.suite, job.task_id, job.seed,
@@ -69,6 +77,8 @@ class Worker:
         except Exception:
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
+        finally:
+            self.env.custom_instruction = None
         # Move outputs into episodes/ with a job-id suffix.
         base = f"{self.suite}__task{job.task_id}__seed{job.seed}__{job.job_id}"
         shutil.move(os.path.join(tmp_dir, result["mp4"]),
@@ -125,4 +135,4 @@ class Worker:
                         self.env.close()
                     except Exception:
                         pass
-                    self.env = LiberoWrapper(self.suite)
+                    self.env = CustomInstructionWrapper(self.suite)

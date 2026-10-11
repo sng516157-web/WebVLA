@@ -21,6 +21,7 @@ class Job:
     job_id: str
     task_id: int
     seed: int
+    instruction: str | None = None
     status: str = STATUS_QUEUED
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
@@ -35,8 +36,9 @@ class JobStore:
         self._lock = asyncio.Lock()
         self.queue: asyncio.Queue[str] = asyncio.Queue()
 
-    async def submit(self, task_id: int, seed: int) -> Job:
-        job = Job(job_id=uuid.uuid4().hex[:12], task_id=task_id, seed=seed)
+    async def submit(self, task_id: int, seed: int, instruction: str | None = None) -> Job:
+        job = Job(job_id=uuid.uuid4().hex[:12], task_id=task_id, seed=seed,
+                  instruction=instruction)
         async with self._lock:
             self._jobs[job.job_id] = job
         await self.queue.put(job.job_id)

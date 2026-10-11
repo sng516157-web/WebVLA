@@ -64,11 +64,13 @@ app = FastAPI(title="WebVLA M1", lifespan=lifespan)
 class SubmitRequest(BaseModel):
     task_id: int
     seed: int = 0
+    instruction: str | None = None  # custom instruction on the task's scene
 
 
 @app.post("/episode")
 async def submit_episode(req: SubmitRequest):
-    job = await app.state.store.submit(req.task_id, req.seed)
+    instruction = (req.instruction or "").strip()[:200] or None
+    job = await app.state.store.submit(req.task_id, req.seed, instruction)
     return {"job_id": job.job_id}
 
 
@@ -82,6 +84,7 @@ async def episode_status(job_id: str):
         "job_id": job.job_id,
         "task_id": job.task_id,
         "seed": job.seed,
+        "instruction": job.instruction,
         "status": job.status,
         "created_at": job.created_at,
         "started_at": job.started_at,
@@ -118,6 +121,8 @@ async def list_episodes():
             "seed": meta.get("seed"),
             "success": meta.get("success"),
             "instruction": meta.get("instruction"),
+            "instruction_overridden": meta.get("instruction_overridden", False),
+            "base_task_language": meta.get("base_task_language"),
             "steps": meta.get("steps"),
             "wall_time_s": meta.get("wall_time_s"),
             "latency_mean_ms": meta.get("latency_mean_ms"),

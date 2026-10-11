@@ -21,7 +21,7 @@ API_BASE = os.environ.get(
 EPISODES_DIR = os.path.join(paths.REPO_ROOT, "episodes")
 M0_VALIDATED_TASKS = {0, 1, 2}
 
-GALLERY_HEADERS = ["task", "seed", "success", "steps", "wall s", "lat ms", "date (UTC)", "job", "file"]
+GALLERY_HEADERS = ["task", "seed", "success", "custom", "steps", "wall s", "lat ms", "date (UTC)", "job", "file"]
 
 
 def _client():
@@ -63,6 +63,7 @@ def _gallery_rows():
         rows.append([
             e.get("task_id"), e.get("seed"),
             "?" if succ is None else ("yes" if succ else "no"),
+            "yes" if e.get("instruction_overridden") else "",
             e.get("steps"), e.get("wall_time_s"), e.get("latency_mean_ms"),
             date, (e.get("job_id") or "")[:8], e.get("file"),
         ])
@@ -70,12 +71,27 @@ def _gallery_rows():
     return rows, by_row
 
 
-def submit(task_id, seed):
+def _badge_md(m):
+    """Result badge: custom-instruction episodes are UNCHECKED (the sim success
+    checker still belongs to the scene's original task)."""
+    if m.get("instruction_overridden"):
+        return (
+            "### CUSTOM INSTRUCTION — success not verifiable\n"
+            f"- instruction (custom): *{m.get('instruction')}*\n"
+            f"- scene's original task: *{m.get('base_task_language')}*"
+        )
+    badge = "SUCCESS" if m.get("success") else "FAILED (task not achieved)"
+    return f"### {badge}\n- instruction: *{m.get('instruction')}*"
+
+
+def submit(task_id, seed, instruction):
     if task_id is None:
         return None, "Pick a task first.", gr.update()
     try:
         job_id = _client().post(
-            "/episode", json={"task_id": int(task_id), "seed": int(seed or 0)}
+            "/episode",
+            json={"task_id": int(task_id), "seed": int(seed or 0),
+                  "instruction": (instruction or "").strip() or None},
         ).json()["job_id"]
     except Exception as e:
         return None, f"submit failed: {e}", gr.update()
@@ -113,13 +129,10 @@ def poll(job_id, tick, dd_choices):
             status_md = "**running** — episode in progress (closed loop)…"
         elif st == "done":
             m = d["result"]["metadata"]
-            badge = "SUCCESS" if m.get("success") else "FAILED (task not achieved)"
             status_md = f"**done** — job `{job_id}`"
             video = gr.update(value=_local_mp4(d["result"].get("mp4_url")))
-            stats = (
-                f"### {badge}\n"
-                f"- instruction: *{m.get('instruction')}*\n"
-                f"- steps: {m.get('steps')} | replans: {m.get('n_replans')} "
+            stats = _badge_md(m) + (
+                f"\n- steps: {m.get('steps')} | replans: {m.get('n_replans')} "
                 f"| wall: {m.get('wall_time_s')}s\n"
                 f"- replan latency mean/p50/max: {m.get('latency_mean_ms')} / "
                 f"{m.get('latency_p50_ms')} / {m.get('latency_max_ms')} ms"
@@ -147,11 +160,8 @@ def on_gallery_select(evt: gr.SelectData):
         return gr.update(value=None), gr.update(value=""), gr.update(
             value=e["error"], visible=True
         )
-    succ = e.get("success")
-    badge = "SUCCESS" if succ else "FAILED (task not achieved)"
-    stats = (
-        f"### {badge}\n- instruction: *{e.get('instruction')}*\n"
-        f"- steps: {e.get('steps')} | wall: {e.get('wall_time_s')}s "
+    stats = _badge_md(e) + (
+        f"\n- steps: {e.get('steps')} | wall: {e.get('wall_time_s')}s "
         f"| replan latency mean: {e.get('latency_mean_ms')} ms"
     )
     return gr.update(value=_local_mp4(e.get("mp4_url"))), gr.update(value=stats), gr.update(visible=False)
@@ -171,11 +181,18 @@ def build_gradio():
 
         with gr.Row():
             task_dd = gr.Dropdown(
-                label="LIBERO task", choices=_task_choices(), scale=4
+                label="LIBERO task (scene)", choices=_task_choices(), scale=4
             )
             seed_in = gr.Number(label="seed (init layout = seed % 50)", value=0,
                                 precision=0, scale=1)
             run_btn = gr.Button("Run episode", variant="primary", scale=1)
+
+        custom_in = gr.Textbox(
+            label="Custom instruction (optional) — same scene, your words; "
+                  "result is UNCHECKED since the success checker belongs to the original task",
+            placeholder="e.g. pick up the ramekin and place it on the plate",
+            max_lines=1,
+        )
 
         status_md = gr.Markdown("idle — submit a job")
         stats_md = gr.Markdown("")
@@ -188,7 +205,7 @@ def build_gradio():
             interactive=False, wrap=True,
         )
 
-        run_btn.click(submit, [task_dd, seed_in], [job_state, status_md, video])
+        run_btn.click(submit, [task_dd, seed_in, custom_in], [job_state, status_md, video])
 
         timer = gr.Timer(2)
         timer.tick(
