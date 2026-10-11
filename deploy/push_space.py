@@ -45,7 +45,7 @@ def stage():
 
 
 def main():
-    from huggingface_hub import HfApi, SpaceHardware
+    from huggingface_hub import HfApi
 
     api = HfApi(token=os.environ["HF_TOKEN"])
     user = api.whoami()["name"]
@@ -59,11 +59,13 @@ def main():
     )
     print(f"pushed -> https://huggingface.co/spaces/{space_id}")
 
-    try:
-        api.request_space_hardware(space_id, hardware=SpaceHardware.ZERO_A10G)
-        print("hardware: ZeroGPU requested")
-    except Exception as e:
-        print(f"hardware request failed ({e}); set ZeroGPU manually in Space settings")
+    # Hardware: cpu-basic (default) on purpose. ZeroGPU ("zero-a10g") would only
+    # help if we shipped CUDA jaxlib — but the pinned jaxlib 0.4.20+cudnn89
+    # predates ZeroGPU's Blackwell (sm_120) hardware and cannot run on it, and
+    # ZeroGPU officially supports PyTorch only. CPU inference measured at
+    # 1.23s/replan on 2 cores (setup/bench_cpu_latency.py) -> ~2-4 min episodes.
+    # To experiment later: request SpaceHardware.ZERO_A10G here and decorate the
+    # rollout with @spaces.GPU, expecting to document the failure mode.
 
     for k, v in {"WEBVLA_BACKEND": "cpu"}.items():
         try:

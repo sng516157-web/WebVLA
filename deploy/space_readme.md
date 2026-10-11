@@ -24,5 +24,5 @@ Notes:
 - Episodes render offscreen via OSMesa (CPU software rendering, no display).
 - The gallery shows episodes from the current container only — the Spaces
   filesystem is ephemeral.
-- GPU inference uses ZeroGPU when available and falls back to CPU
-  automatically; CPU episodes take a few minutes.
+- Inference runs on CPU (pinned jaxlib 0.4.20 predates ZeroGPU's Blackwell
+  hardware and ZeroGPU is PyTorch-only); episodes take a few minutes.
