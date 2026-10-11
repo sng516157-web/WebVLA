@@ -7,3 +7,5 @@ checkpoints/
 setup/*.log
 setup/frame*.png
 reference/episodes/
+deploy/_staging/
+native_libs/
