@@ -107,7 +107,12 @@ def submit(task_id, seed, instruction):
 
 
 def poll(job_id, tick, dd_choices):
-    """Timer handler: refresh job status; periodically gallery + task list."""
+    """Timer handler: refresh job status; periodically gallery + task list.
+
+    dd_choices is the choices STATE (a list), not the dropdown's value — the
+    UI is built before uvicorn accepts connections, so the initial fetch gets
+    nothing and we must retry here until the API answers.
+    """
     status_md = gr.update()
     video = gr.update()
     stats = gr.update()
@@ -115,11 +120,13 @@ def poll(job_id, tick, dd_choices):
     gallery = gr.update()
     dd = gr.update()
     new_job = job_id
+    new_choices = dd_choices
 
     if not dd_choices:
         choices = _task_choices()
         if choices:
-            dd = gr.update(choices=choices)
+            new_choices = choices
+            dd = gr.update(choices=choices, value=choices[0][1])
 
     if tick % 5 == 0:
         rows, _ = _gallery_rows()
@@ -129,7 +136,7 @@ def poll(job_id, tick, dd_choices):
         try:
             d = _client().get(f"/episode/{job_id}").json()
         except Exception as e:
-            return new_job, f"poll error: {e}", video, stats, error, gallery, dd
+            return new_job, f"poll error: {e}", video, stats, error, gallery, dd, new_choices
         st = d.get("status")
         if st == "queued":
             status_md = f"**queued** — position {d.get('queue_position')}"
@@ -154,7 +161,7 @@ def poll(job_id, tick, dd_choices):
             new_job = None
             rows, _ = _gallery_rows()
             gallery = gr.update(value=rows)
-    return new_job, status_md, video, stats, error, gallery, dd
+    return new_job, status_md, video, stats, error, gallery, dd, new_choices
 
 
 def on_gallery_select(evt: gr.SelectData):
@@ -186,13 +193,14 @@ def build_gradio():
         )
         job_state = gr.State(None)
         tick_state = gr.State(0)
+        choices_state = gr.State([])  # task dropdown choices; filled by the timer
 
         with gr.Row():
             with gr.Column(scale=3):
                 with gr.Row():
                     task_dd = gr.Dropdown(
-                        label="LIBERO task (scene)", choices=_task_choices(),
-                        value=0, scale=4,
+                        label="LIBERO task (scene)", choices=[],
+                        value=None, scale=4,
                     )
                     seed_in = gr.Number(label="seed (init layout = seed % 50)",
                                         value=0, precision=0, scale=1)
@@ -230,8 +238,8 @@ def build_gradio():
         timer = gr.Timer(2)
         timer.tick(
             lambda j, t, c: (t + 1, *poll(j, t + 1, c)),
-            [job_state, tick_state, task_dd],
-            [tick_state, job_state, status_md, video, stats_md, error_tb, gallery, task_dd],
+            [job_state, tick_state, choices_state],
+            [tick_state, job_state, status_md, video, stats_md, error_tb, gallery, task_dd, choices_state],
         )
 
         gallery.select(on_gallery_select, None, [video, stats_md, error_tb])
