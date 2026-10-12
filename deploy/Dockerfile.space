@@ -1,0 +1,67 @@
+# WebVLA M1 Space image: LIBERO + Octo closed-loop demo (CPU, OSMesa).
+#
+# Why Docker SDK instead of Gradio SDK: the stack has an irreconcilable
+# dependency triangle (transformers 4.34.1 needs huggingface-hub<1.0 while
+# gradio 6.30 needs >=1.16 — pip cannot resolve them together), and
+# pip-installing LIBERO drops its data files (.bddl/.init/assets) because the
+# repo ships no MANIFEST.in. Both need install-order control that only a
+# Dockerfile gives. Verified locally: the pip-installed libero package
+# contains 0 .bddl / 0 .init / 0 asset files.
+
+FROM python:3.10-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libosmesa6 libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+      curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 user
+WORKDIR /app
+
+COPY requirements.txt .
+# Core stack WITHOUT the gradio lines (huggingface-hub triangle) and WITHOUT
+# libero (data files dropped by pip; installed from the source tree below).
+# huggingface-hub==0.36.2 stays pinned in the core resolve (consistent with
+# transformers 4.34.1); gradio is then installed --no-deps, mirroring the
+# validated local venv.
+RUN grep -v -E '^(gradio==|gradio-client==|libero @)' requirements.txt > /tmp/reqs-core.txt \
+ && pip install --no-cache-dir -r /tmp/reqs-core.txt \
+ && pip install --no-cache-dir --no-deps gradio==6.30.0 gradio-client==2.7.2
+
+# LIBERO from the pinned source tree, on sys.path via .pth (same mechanism as
+# the validated local install), plus a pre-written ~/.libero/config.yaml so
+# the package's interactive first-import prompt never fires.
+RUN curl -sSL https://codeload.github.com/Lifelong-Robot-Learning/LIBERO/tar.gz/8f1084e3132a39270c3a13ebe37270a43ece2a01 \
+      -o /tmp/libero.tar.gz \
+ && tar xzf /tmp/libero.tar.gz -C /opt \
+ && mv /opt/LIBERO-8f1084e3132a39270c3a13ebe37270a43ece2a01 /opt/LIBERO \
+ && rm /tmp/libero.tar.gz \
+ && echo /opt/LIBERO > /usr/local/lib/python3.10/site-packages/libero_repo.pth \
+ && mkdir -p /home/user/.libero \
+ && printf '%s\n' \
+      'benchmark_root: /opt/LIBERO/libero/libero' \
+      'bddl_files: /opt/LIBERO/libero/libero/bddl_files' \
+      'init_states: /opt/LIBERO/libero/libero/init_files' \
+      'datasets: /opt/LIBERO/libero/datasets' \
+      'assets: /opt/LIBERO/libero/libero/assets' \
+      > /home/user/.libero/config.yaml
+
+COPY --chown=user . /app
+
+USER user
+ENV HOME=/home/user \
+    HF_HOME=/home/user/.cache/huggingface \
+    MUJOCO_GL=osmesa \
+    PYOPENGL_PLATFORM=osmesa \
+    WEBVLA_BACKEND=cpu \
+    WEBVLA_CKPT=hf://swn21/octo-libero-spatial-ft \
+    TOKENIZERS_PARALLELISM=false \
+    WANDB_MODE=disabled
+
+# Pre-pull the policy checkpoint + T5 tokenizer files so the first visitor
+# doesn't wait on an 810MB download.
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('swn21/octo-libero-spatial-ft')" \
+ && python -c "from huggingface_hub import snapshot_download; snapshot_download('t5-base', allow_patterns=['*.json', '*.model', '*.txt'])"
+
+EXPOSE 7860
+CMD ["python", "app.py"]

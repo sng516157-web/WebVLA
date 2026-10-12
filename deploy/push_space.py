@@ -5,8 +5,9 @@ Needs HF_TOKEN (write) in the environment.
   HF_TOKEN=... bash setup/run.sh deploy/push_space.py
 
 Stages a minimal copy of the repo into deploy/_staging (gitignored), pushes it
-as the Space content, then requests ZeroGPU hardware and sets the env vars.
-The Space is a Gradio SDK space: HF installs requirements.txt and runs app.py.
+as the Space content, then sets the env vars.
+The Space is a Docker SDK space (deploy/Dockerfile.space -> Dockerfile): HF
+builds the image remotely and runs `python app.py` on cpu-basic.
 """
 
 import os
@@ -24,6 +25,7 @@ COPY_FILES = ["app.py", "paths.py"]
 RENAMES = {
     "requirements-space.txt": "requirements.txt",
     os.path.join("deploy", "space_readme.md"): "README.md",
+    os.path.join("deploy", "Dockerfile.space"): "Dockerfile",
 }
 
 
@@ -51,7 +53,7 @@ def main():
     user = api.whoami()["name"]
     space_id = f"{user}/{SPACE_NAME}"
 
-    api.create_repo(space_id, repo_type="space", space_sdk="gradio", exist_ok=True)
+    api.create_repo(space_id, repo_type="space", space_sdk="docker", exist_ok=True)
     stage()
     api.upload_folder(
         folder_path=STAGING, repo_id=space_id, repo_type="space",
