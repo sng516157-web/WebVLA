@@ -175,8 +175,21 @@ and still work.
 ## Live demo
 
 - Space: https://huggingface.co/spaces/swn21/webvla-libero-octo
+  (Docker SDK, cpu-basic, requires HF PRO on the owner's account)
 - Checkpoint: https://huggingface.co/swn21/octo-libero-spatial-ft (the M0
   fine-tuned 50k-step model, uploaded by `deploy/push_ckpt.py`)
+
+Verified on the live Space (2026-10-12, `deploy/verify_space.py` +
+`deploy/test_space_failure.py`):
+
+- `/healthz` ok (cpu backend, warmup done), 10 LIBERO-Spatial tasks listed.
+- Full episode via API: task 0 / seed 0 → done, 220 steps, 135 s wall,
+  replan latency mean 1367 ms (CPU), mp4 served as `video/mp4`.
+  The episode itself scored success=false — CPU+OSMesa trajectories diverge
+  numerically from the local GPU+EGL runs (closed-loop chaos), so Space
+  outcomes don't reproduce local success rates seed-for-seed.
+- Induced failure (invalid task_id) → `status=failed` with traceback;
+  server and worker stayed alive.
 
 ## Architecture
 
