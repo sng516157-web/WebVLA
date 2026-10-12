@@ -28,6 +28,7 @@ class Job:
     finished_at: float | None = None
     result: dict | None = None
     error: str | None = None
+    pending_instruction: str | None = None  # M2 injection, picked up at next replan
 
 
 class JobStore:

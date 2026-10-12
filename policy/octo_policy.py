@@ -95,6 +95,13 @@ class OctoPolicy:
         self._num_obs = 0
         self._task = self.model.create_tasks(texts=[instruction])
 
+    def set_instruction(self, instruction):
+        """Swap the language instruction mid-episode, KEEPING the history
+        window (M2 instruction injection, applied at replan boundaries).
+        Unlike reset(), the observation history is preserved so the policy
+        keeps its temporal context."""
+        self._task = self.model.create_tasks(texts=[instruction])
+
     def act(self, obs):
         """One observation dict -> action chunk of shape (action_horizon, 7)."""
         from octo.utils.gym_wrappers import stack_and_pad

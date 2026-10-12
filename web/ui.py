@@ -80,21 +80,36 @@ def _gallery_rows():
 
 
 def _badge_md(m):
-    """Result badge: custom-instruction episodes are UNCHECKED (the sim success
-    checker still belongs to the scene's original task)."""
-    if m.get("instruction_overridden"):
-        return (
-            "### CUSTOM INSTRUCTION — success not verifiable\n"
-            f"- instruction (custom): *{m.get('instruction')}*\n"
-            f"- scene's original task: *{m.get('base_task_language')}*"
-        )
+    """Result badge: custom-instruction or mid-episode-injected runs are
+    UNCHECKED (the sim success checker still belongs to the scene's original
+    task)."""
+    events = m.get("instruction_events") or []
+    if m.get("instruction_overridden") or events:
+        lines = ["### CUSTOM INSTRUCTION — success not verifiable"]
+        if m.get("instruction_overridden"):
+            lines.append(f"- instruction (custom): *{m.get('instruction')}*")
+        if events:
+            lines.append("- instruction changed mid-episode:")
+            for e in events:
+                lines.append(f"  - step {e['step']} ({e['at_s']}s): *{e['text']}*")
+        if m.get("base_task_language"):
+            lines.append(f"- scene's original task: *{m.get('base_task_language')}*")
+        return "\n".join(lines)
     badge = "SUCCESS" if m.get("success") else "FAILED (task not achieved)"
     return f"### {badge}\n- instruction: *{m.get('instruction')}*"
 
 
+def _live_iframe(job_id):
+    return (
+        f'<iframe src="/live?job_id={job_id}" '
+        'style="width:100%;height:360px;border:0;border-radius:8px;'
+        'background:#0b0f19"></iframe>'
+    )
+
+
 def submit(task_id, seed, instruction):
     if task_id is None:
-        return None, "Pick a task first.", gr.update()
+        return None, "Pick a task first.", gr.update(), gr.update(visible=False)
     try:
         job_id = _client().post(
             "/episode",
@@ -102,8 +117,25 @@ def submit(task_id, seed, instruction):
                   "instruction": (instruction or "").strip() or None},
         ).json()["job_id"]
     except Exception as e:
-        return None, f"submit failed: {e}", gr.update()
-    return job_id, f"Submitted job `{job_id}` — waiting for status…", gr.update(value=None)
+        return None, f"submit failed: {e}", gr.update(), gr.update(visible=False)
+    return (job_id, f"Submitted job `{job_id}` — waiting for status…",
+            gr.update(value=None),
+            gr.update(value=_live_iframe(job_id), visible=True))
+
+
+def inject(job_id, text):
+    if not job_id:
+        return "No active job — submit one first."
+    if not (text or "").strip():
+        return "Type an instruction to inject."
+    try:
+        r = _client().post(f"/episode/{job_id}/instruction",
+                           json={"text": text.strip()})
+        if r.status_code == 200:
+            return f"Injection queued (applies at next replan): *{text.strip()[:200]}*"
+        return f"inject failed: {r.json().get('detail', r.text)}"
+    except Exception as e:
+        return f"inject failed: {e}"
 
 
 def poll(job_id, tick, dd_choices):
@@ -119,6 +151,7 @@ def poll(job_id, tick, dd_choices):
     error = gr.update()
     gallery = gr.update()
     dd = gr.update()
+    live = gr.update()
     new_job = job_id
     new_choices = dd_choices
 
@@ -136,16 +169,18 @@ def poll(job_id, tick, dd_choices):
         try:
             d = _client().get(f"/episode/{job_id}").json()
         except Exception as e:
-            return new_job, f"poll error: {e}", video, stats, error, gallery, dd, new_choices
+            return new_job, f"poll error: {e}", video, stats, error, gallery, dd, new_choices, live
         st = d.get("status")
         if st == "queued":
             status_md = f"**queued** — position {d.get('queue_position')}"
         elif st == "running":
-            status_md = "**running** — episode in progress (closed loop)…"
+            status_md = ("**running** — live below; inject a new instruction "
+                         "any time (applies at the next replan)")
         elif st == "done":
             m = d["result"]["metadata"]
             status_md = f"**done** — job `{job_id}`"
             video = gr.update(value=_local_mp4(d["result"].get("mp4_url")))
+            live = gr.update(visible=False)
             stats = _badge_md(m) + (
                 f"\n- steps: {m.get('steps')} | replans: {m.get('n_replans')} "
                 f"| wall: {m.get('wall_time_s')}s\n"
@@ -158,10 +193,11 @@ def poll(job_id, tick, dd_choices):
         elif st == "failed":
             status_md = f"**failed** — job `{job_id}` crashed"
             error = gr.update(value=d.get("error") or "unknown error", visible=True)
+            live = gr.update(visible=False)
             new_job = None
             rows, _ = _gallery_rows()
             gallery = gr.update(value=rows)
-    return new_job, status_md, video, stats, error, gallery, dd, new_choices
+    return new_job, status_md, video, stats, error, gallery, dd, new_choices, live
 
 
 def on_gallery_select(evt: gr.SelectData):
@@ -222,6 +258,15 @@ def build_gradio():
                                  height=280, width=280, interactive=False, scale=1)
 
         status_md = gr.Markdown("idle — submit a job")
+        live_html = gr.HTML(visible=False)
+        with gr.Row():
+            inject_in = gr.Textbox(
+                label="Mid-episode instruction injection (while running)",
+                placeholder="e.g. now put the ramekin on the plate instead",
+                max_lines=1, scale=4,
+            )
+            inject_btn = gr.Button("Inject", scale=1)
+        inject_md = gr.Markdown("")
         stats_md = gr.Markdown("")
         video = gr.Video(label="episode", height=400)
         error_tb = gr.Textbox(label="error traceback", visible=False, lines=12)
@@ -232,14 +277,17 @@ def build_gradio():
             interactive=False, wrap=True,
         )
 
-        run_btn.click(submit, [task_dd, seed_in, custom_in], [job_state, status_md, video])
+        run_btn.click(submit, [task_dd, seed_in, custom_in],
+                      [job_state, status_md, video, live_html])
+        inject_btn.click(inject, [job_state, inject_in], inject_md)
         task_dd.change(_scene_img, task_dd, scene_img)
 
         timer = gr.Timer(2)
         timer.tick(
             lambda j, t, c: (t + 1, *poll(j, t + 1, c)),
             [job_state, tick_state, choices_state],
-            [tick_state, job_state, status_md, video, stats_md, error_tb, gallery, task_dd, choices_state],
+            [tick_state, job_state, status_md, video, stats_md, error_tb,
+             gallery, task_dd, choices_state, live_html],
         )
 
         gallery.select(on_gallery_select, None, [video, stats_md, error_tb])

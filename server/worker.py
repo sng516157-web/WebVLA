@@ -13,6 +13,7 @@ failure metadata JSON into episodes/ so the gallery never silently drops it.
 """
 
 import asyncio
+import io
 import json
 import os
 import shutil
@@ -25,6 +26,27 @@ from runner.batch import build_stack
 from runner.run_episode import run_and_save
 from server.custom_env import CustomInstructionWrapper
 from server.jobs import STATUS_DONE, STATUS_FAILED, STATUS_RUNNING, JobStore
+from server.stream import BroadcasterRegistry
+
+
+class _Hooks:
+    """M2 live hooks bound to one job: frame broadcast + instruction pickup."""
+
+    def __init__(self, job, broadcaster):
+        self.job = job
+        self.bc = broadcaster
+
+    def on_frame(self, frame, step):
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.fromarray(frame).save(buf, format="JPEG", quality=80)
+        self.bc.publish(buf.getvalue())
+
+    def pending_instruction(self):
+        text = self.job.pending_instruction
+        self.job.pending_instruction = None
+        return text
 
 
 class Worker:
@@ -40,6 +62,7 @@ class Worker:
         self.env = None
         self.policy = None
         self.warmup_done = False
+        self.streams = BroadcasterRegistry()
 
     def build(self):
         """Blocking: construct env + policy, then JIT-warm one replan."""
@@ -65,16 +88,20 @@ class Worker:
             "checkpoint": self.checkpoint,
         }
         self.env.custom_instruction = job.instruction
+        extra_meta["base_task_language"] = self.env.benchmark.get_task(
+            job.task_id).language
         if job.instruction:
             extra_meta["instruction_overridden"] = True
-            extra_meta["base_task_language"] = self.env.benchmark.get_task(
-                job.task_id).language
+        bc = self.streams.for_job(job.job_id)
         try:
             result = run_and_save(
                 self.env, self.policy, self.suite, job.task_id, job.seed,
                 tmp_dir, exec_horizon=self.exec_horizon, extra_meta=extra_meta,
+                hooks=_Hooks(job, bc),
             )
         except Exception:
+            bc.publish(json.dumps({"type": "failed"}))
+            self.streams.finish(job.job_id)
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
         finally:
@@ -87,6 +114,9 @@ class Worker:
         with open(os.path.join(self.episodes_dir, base + ".json"), "w") as f:
             json.dump(result, f, indent=2)
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        bc.publish(json.dumps({"type": "done", "success": result.get("success"),
+                               "steps": result.get("steps")}))
+        self.streams.finish(job.job_id)
         return result
 
     def _write_failure(self, job, tb):
@@ -136,3 +166,4 @@ class Worker:
                     except Exception:
                         pass
                     self.env = CustomInstructionWrapper(self.suite)
+                self.streams.sweep()

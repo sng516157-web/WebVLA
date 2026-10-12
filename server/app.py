@@ -15,13 +15,18 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import paths
-from server.jobs import STATUS_QUEUED, JobStore
+from server.jobs import STATUS_QUEUED, STATUS_RUNNING, JobStore
 from server.worker import Worker
+
+EPISODES_DIR = os.path.join(paths.REPO_ROOT, "episodes")
+LIVE_HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "static", "live.html")
 
 EPISODES_DIR = os.path.join(paths.REPO_ROOT, "episodes")
 DEFAULT_CHECKPOINT = os.path.join(
@@ -67,10 +72,15 @@ class SubmitRequest(BaseModel):
     instruction: str | None = None  # custom instruction on the task's scene
 
 
+class InjectRequest(BaseModel):
+    text: str
+
+
 @app.post("/episode")
 async def submit_episode(req: SubmitRequest):
     instruction = (req.instruction or "").strip()[:200] or None
     job = await app.state.store.submit(req.task_id, req.seed, instruction)
+    app.state.worker.streams.for_job(job.job_id)  # ws clients can connect at once
     return {"job_id": job.job_id}
 
 
@@ -99,7 +109,68 @@ async def episode_status(job_id: str):
         }
     if job.status == "failed":
         resp["error"] = job.error
+    if job.result and job.result.get("instruction_events"):
+        resp["instruction_events"] = job.result["instruction_events"]
     return resp
+
+
+@app.post("/episode/{job_id}/instruction")
+async def inject_instruction(job_id: str, req: InjectRequest):
+    """M2: queue an instruction swap for a RUNNING job (applied at the next
+    replan boundary). 409 unless the job is currently running."""
+    store = app.state.store
+    job = await store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="unknown job_id")
+    if job.status != STATUS_RUNNING:
+        raise HTTPException(status_code=409, detail=f"job is {job.status}, not running")
+    text = req.text.strip()[:200]
+    if not text:
+        raise HTTPException(status_code=400, detail="empty instruction")
+    job.pending_instruction = text
+    return {"ok": True, "queued_instruction": text}
+
+
+@app.get("/episode/{job_id}/frame.jpg")
+async def latest_frame(job_id: str):
+    """Latest streamed frame for a job (polling fallback for the ws)."""
+    bc = app.state.worker.streams.get(job_id)
+    if bc is None or bc.latest_frame is None:
+        return Response(status_code=204)
+    return Response(content=bc.latest_frame, media_type="image/jpeg")
+
+
+@app.websocket("/ws/jobs/{job_id}")
+async def job_stream(ws: WebSocket, job_id: str):
+    """M2 live stream: binary JPEG frames, then a terminal JSON text message."""
+    bc = app.state.worker.streams.get(job_id)
+    if bc is None:
+        await ws.close(code=4404)
+        return
+    await ws.accept()
+    q = bc.subscribe()
+    try:
+        while True:
+            msg = await q.get()
+            if isinstance(msg, bytes):
+                await ws.send_bytes(msg)
+            else:
+                await ws.send_text(msg)
+                break  # terminal control message ends the stream
+    except WebSocketDisconnect:
+        pass
+    finally:
+        bc.unsubscribe(q)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+@app.get("/live")
+async def live_page():
+    """Live-view iframe page (server/static/live.html; job_id via query)."""
+    return FileResponse(LIVE_HTML)
 
 
 @app.get("/episodes")

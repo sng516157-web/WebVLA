@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WebVLA live</title>
+<style>
+  body { margin: 0; background: #0b0f19; color: #e5e7eb;
+         font-family: system-ui, sans-serif; display: flex;
+         flex-direction: column; align-items: center; }
+  #bar { width: 100%; padding: 6px 10px; font-size: 13px; color: #9ca3af;
+         box-sizing: border-box; }
+  #bar b { color: #e5e7eb; }
+  img { max-width: 100%; max-height: calc(100vh - 34px); display: block;
+        image-rendering: auto; background: #111827; }
+  .ok { color: #34d399; } .bad { color: #f87171; }
+</style>
+</head>
+<body>
+<div id="bar">connecting…</div>
+<img id="view" alt="live episode frames">
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var jobId = params.get("job_id");
+  var bar = document.getElementById("bar");
+  var img = document.getElementById("view");
+  if (!jobId) { bar.textContent = "missing job_id"; return; }
+
+  var proto = location.protocol === "https:" ? "wss" : "ws";
+  var ws = new WebSocket(proto + "://" + location.host + "/ws/jobs/" + jobId);
+  ws.binaryType = "blob";
+  var n = 0, currentUrl = null, t0 = Date.now();
+
+  ws.onopen = function () { bar.textContent = "live — job " + jobId; };
+  ws.onmessage = function (ev) {
+    if (typeof ev.data === "string") {
+      var msg = JSON.parse(ev.data);
+      if (msg.type === "done") {
+        bar.innerHTML = "episode <b class='" + (msg.success ? "ok" : "bad") +
+          "'>" + (msg.success ? "SUCCESS" : "FAILED") + "</b> — " + msg.steps +
+          " steps, " + n + " frames streamed";
+      } else if (msg.type === "failed") {
+        bar.innerHTML = "episode <b class='bad'>crashed</b>";
+      }
+      return;
+    }
+    var url = URL.createObjectURL(ev.data);
+    img.src = url;
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = url;
+    n++;
+    var dt = (Date.now() - t0) / 1000;
+    bar.textContent = "live — job " + jobId + " — frame " + n +
+      " (" + (n / dt).toFixed(1) + " fps)";
+  };
+  ws.onclose = function (ev) {
+    if (ev.code === 4404) bar.textContent = "unknown or expired job " + jobId;
+    else if (n === 0) bar.textContent = "connection closed";
+  };
+  ws.onerror = function () { bar.textContent = "stream error"; };
+})();
+</script>
+</body>
+</html>

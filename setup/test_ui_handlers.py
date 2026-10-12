@@ -22,16 +22,20 @@ def main():
     assert len(choices) == 10, f"expected 10 task choices, got {len(choices)}"
     print(f"[OK] task dropdown choices: {len(choices)} (first: {choices[0][0][:60]}…)")
 
-    job_id, status, _ = submit(0, 14)
+    job_id, status, _, live = submit(0, 14, None)
     assert job_id, f"submit failed: {status}"
-    print(f"[OK] submitted via UI handler: {job_id}")
+    live_val = unwrap(live)
+    assert isinstance(live_val, str) and f"/live?job_id={job_id}" in live_val, \
+        f"live iframe missing: {live_val}"
+    print(f"[OK] submitted via UI handler: {job_id} (live iframe shown)")
 
     video_val, stats_val, err_val, final_status = None, None, None, None
     tick = 0
     t0 = time.time()
     while time.time() - t0 < 300:
         tick += 1
-        job_id, status, video, stats, err, gallery, dd = poll(job_id, tick, choices)
+        job_id, status, video, stats, err, gallery, dd, choices, live = poll(
+            job_id, tick, choices)
         video_val = unwrap(video) or video_val
         stats_val = unwrap(stats) or stats_val
         e = unwrap(err)

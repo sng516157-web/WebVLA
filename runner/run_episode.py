@@ -17,21 +17,48 @@ from datetime import datetime, timezone
 import numpy as np
 
 
-def run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon, result):
-    """Generator: yields frames; fills `result` on completion."""
+def run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon, result,
+                       hooks=None):
+    """Generator: yields frames; fills `result` on completion.
+
+    hooks (optional, M2): object with
+      - on_frame(frame, step): called after every yielded frame
+      - pending_instruction() -> str | None: polled at each replan boundary;
+        a non-None value is adopted by the policy mid-episode and recorded in
+        result["instruction_events"]. The sim success checker is untouched, so
+        injected episodes are UNCHECKED by convention.
+    hooks=None reproduces the M0 behavior exactly.
+    """
     t_start = time.time()
     obs = env.reset(task_id, seed)
     policy.reset(obs["instruction"])
     latencies = []
+    instruction_events = []
     done = False
-    yield env.render("agentview")
+    first_frame = env.render("agentview")
+    if hooks is not None:
+        hooks.on_frame(first_frame, env.steps)
+    yield first_frame
     while env.steps < max_steps and not done:
+        if hooks is not None:
+            new_instr = hooks.pending_instruction()
+            if new_instr:
+                policy.set_instruction(new_instr)
+                env.instruction = new_instr
+                instruction_events.append({
+                    "step": env.steps,
+                    "text": new_instr,
+                    "at_s": round(time.time() - t_start, 2),
+                })
         t0 = time.perf_counter()
         actions = policy.act(env.obs())
         latencies.append((time.perf_counter() - t0) * 1000.0)
         for a in actions[:exec_horizon]:
             _, _, done, _ = env.step(a)
-            yield env.render("agentview")
+            frame = env.render("agentview")
+            if hooks is not None:
+                hooks.on_frame(frame, env.steps)
+            yield frame
             if done:
                 break
     lat_ms = [round(x, 2) for x in latencies]
@@ -50,10 +77,12 @@ def run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon, resu
             "latency_max_ms": round(float(np.max(lat_ms)), 2) if lat_ms else None,
         }
     )
+    if instruction_events:
+        result["instruction_events"] = instruction_events
 
 
 def run_and_save(env, policy, suite_name, task_id, seed, out_dir, exec_horizon,
-                 max_steps=None, fps=30, extra_meta=None):
+                 max_steps=None, fps=30, extra_meta=None, hooks=None):
     """Run one episode, save mp4 + metadata JSON into out_dir, return result."""
     max_steps = max_steps or env.max_steps
     name = f"{suite_name}__task{task_id}__seed{seed}"
@@ -75,7 +104,8 @@ def run_and_save(env, policy, suite_name, task_id, seed, out_dir, exec_horizon,
     import imageio.v2 as imageio
 
     writer = imageio.get_writer(mp4_path, fps=fps)
-    frames = run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon, result)
+    frames = run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon,
+                                result, hooks=hooks)
     for frame in frames:
         writer.append_data(frame)
     writer.close()
