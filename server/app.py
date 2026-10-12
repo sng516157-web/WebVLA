@@ -163,6 +163,7 @@ async def healthz():
     }
 
 
+os.makedirs(EPISODES_DIR, exist_ok=True)  # needed at import time on fresh containers
 app.mount("/episodes", StaticFiles(directory=EPISODES_DIR), name="episodes")
 
 if os.environ.get("WEBVLA_NO_UI") != "1":
