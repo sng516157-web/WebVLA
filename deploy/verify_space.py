@@ -37,6 +37,29 @@ def main():
 
     job_id = post("/episode", {"task_id": 0, "seed": 0})["job_id"]
     print("submitted job:", job_id, flush=True)
+
+    # M2: live ws check in a side thread — count frames while polling.
+    import threading
+    import websockets.sync.client
+    ws_frames = [0]
+
+    def watch():
+        try:
+            with websockets.sync.client.connect(
+                f"wss://swn21-webvla-libero-octo.hf.space/ws/jobs/{job_id}",
+                open_timeout=60,
+            ) as ws:
+                while True:
+                    msg = ws.recv(timeout=120)
+                    if isinstance(msg, bytes):
+                        ws_frames[0] += 1
+                    else:
+                        break
+        except Exception as e:
+            print("ws watch error:", e)
+
+    threading.Thread(target=watch, daemon=True).start()
+
     t0 = time.time()
     while True:
         d = get(f"/episode/{job_id}")
@@ -53,6 +76,7 @@ def main():
             with urllib.request.urlopen(req, timeout=60) as r:
                 print("mp4:", r.status, r.headers.get("Content-Type"),
                       r.headers.get("Content-Length"), "bytes")
+            print("ws frames streamed:", ws_frames[0])
             break
         if st == "failed":
             print("FAILED:", (d.get("error") or "")[-2000:])
