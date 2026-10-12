@@ -223,22 +223,30 @@ HF_TOKEN=... HF_HUB_OFFLINE=0 bash setup/run.sh deploy/push_space.py  # every up
 
 `push_space.py` stages the runtime subset (`server/ web/ runner/ sim/
 policy/ assets/ app.py paths.py`, plus `requirements-space.txt` →
-`requirements.txt`) and pushes it as a Gradio-SDK Space on cpu-basic.
+`requirements.txt` and `deploy/Dockerfile.space` → `Dockerfile`) and pushes
+it as a **Docker SDK** Space on cpu-basic (HF builds the image remotely; no
+local Docker needed).
 Notes:
 
-- The Space downloads the fine-tuned checkpoint from the HF model repo above
-  (`WEBVLA_CKPT=hf://...` set by `app.py` via `SPACE_AUTHOR_NAME`).
-- Rendering on the Space is OSMesa (no GPU/EGL there); OSMesa system libs are
-  installed at startup by `server/bootstrap_osmesa.py` (rootless).
+- Docker SDK was forced on us by two Gradio-SDK build failures:
+  (a) the runtime force-installs the latest gradio (6.30), which needs
+  `huggingface-hub>=1.16`, while transformers 4.34.1 needs `<1.0` — pip
+  cannot resolve them together; (b) pip-installing LIBERO from its codeload
+  tarball drops all data files (`.bddl`/`.init`/assets — no MANIFEST.in),
+  verified locally. The Dockerfile installs the core stack with the hub pin,
+  adds gradio `--no-deps`, and puts the pinned LIBERO source tree on
+  `sys.path` via `.pth` with a pre-written `~/.libero/config.yaml`.
+- The Space image pre-pulls the fine-tuned checkpoint
+  (`hf://swn21/octo-libero-spatial-ft`, 810MB) and the T5 tokenizer at build
+  time, so the first visitor doesn't wait on downloads.
+- Rendering on the Space is OSMesa (`libosmesa6` apt-installed in the image).
 - ZeroGPU was evaluated and dropped: it is Gradio-SDK + PyTorch-only, and the
   pinned `jaxlib 0.4.20+cudnn89` predates ZeroGPU's Blackwell (sm_120)
   hardware, so CPU inference on cpu-basic is the supported path.
-- Docker was evaluated and dropped for M1 (local WSL deploy target made it
-  redundant); the pinned-dependency install lives in `requirements-space.txt`.
-- **Deploy status: pending** — HF currently requires a PRO subscription to
-  create Gradio/Docker Spaces on cpu-basic (`402 Payment Required` from the
-  repo-create API). The checkpoint is already public; the Space push is a
-  single command once PRO is active.
+- Local Docker was evaluated and dropped for development; the Dockerfile here
+  is deploy-only and is built by HF, never locally.
+- Deploy requires an HF PRO subscription (HF rejects Gradio/Docker Space
+  creation on cpu-basic otherwise — `402 Payment Required`).
 
 ## Known limitations (M1)
 
