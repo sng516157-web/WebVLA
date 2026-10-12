@@ -26,6 +26,7 @@ RENAMES = {
     "requirements-space.txt": "requirements.txt",
     os.path.join("deploy", "space_readme.md"): "README.md",
     os.path.join("deploy", "Dockerfile.space"): "Dockerfile",
+    os.path.join("deploy", "space_smoke.py"): "space_smoke.py",
 }
 
 

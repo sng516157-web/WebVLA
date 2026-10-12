@@ -19,14 +19,15 @@ RUN useradd -m -u 1000 user
 WORKDIR /app
 
 COPY requirements.txt .
-# Core stack WITHOUT the gradio lines (huggingface-hub triangle) and WITHOUT
-# libero (data files dropped by pip; installed from the source tree below).
-# huggingface-hub==0.36.2 stays pinned in the core resolve (consistent with
-# transformers 4.34.1); gradio is then installed --no-deps, mirroring the
-# validated local venv.
-RUN grep -v -E '^(gradio==|gradio-client==|libero @)' requirements.txt > /tmp/reqs-core.txt \
- && pip install --no-cache-dir -r /tmp/reqs-core.txt \
- && pip install --no-cache-dir --no-deps gradio==6.30.0 gradio-client==2.7.2
+# Install the frozen env with --no-deps: requirements.txt is the full closure
+# of the validated local venv, and several pinned pairs are intentionally
+# conflicting-but-working (transformers 4.34.1 wants huggingface-hub<1.0,
+# gradio 6.30 wants >=1.16; googleapis-common-protos 1.75.5 wants a newer
+# protobuf). pip's resolver cannot accept them; --no-deps installs the freeze
+# verbatim. libero is excluded (pip drops its data files) and installed from
+# the source tree below.
+RUN grep -v -E '^(libero @)' requirements.txt > /tmp/reqs-core.txt \
+ && pip install --no-cache-dir --no-deps -r /tmp/reqs-core.txt
 
 # LIBERO from the pinned source tree, on sys.path via .pth (same mechanism as
 # the validated local install), plus a pre-written ~/.libero/config.yaml so
@@ -62,6 +63,11 @@ ENV HOME=/home/user \
 # doesn't wait on an 810MB download.
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('swn21/octo-libero-spatial-ft')" \
  && python -c "from huggingface_hub import snapshot_download; snapshot_download('t5-base', allow_patterns=['*.json', '*.model', '*.txt'])"
+
+# Fail the BUILD, not the Space: create the env, render a frame, run one
+# policy forward pass (validates LIBERO data files, OSMesa, TF, hub pins,
+# checkpoint integrity, jax compile).
+RUN python space_smoke.py
 
 EXPOSE 7860
 CMD ["python", "app.py"]
