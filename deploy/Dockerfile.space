@@ -48,6 +48,7 @@ RUN curl -sSL https://codeload.github.com/Lifelong-Robot-Learning/LIBERO/tar.gz/
       > /home/user/.libero/config.yaml
 
 COPY --chown=user . /app
+RUN mkdir -p /app/episodes && chown -R user:user /app
 
 USER user
 ENV HOME=/home/user \
