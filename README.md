@@ -1,8 +1,9 @@
-# WebVLA M0 — Sim-based VLA demo (LIBERO + Octo)
+# WebVLA — sim-based VLA demo (LIBERO + Octo)
 
-Local Python pipeline: natural-language instruction → Octo policy in closed loop
-on LIBERO simulation tasks → per-episode mp4 + metadata JSON. CLI scripts only —
-no web server, no UI, no Docker.
+M0 (below): local Python pipeline — natural-language instruction → Octo policy
+in closed loop on LIBERO simulation tasks → per-episode mp4 + metadata JSON.
+M1 (bottom of this file): the same validated loop behind a hosted queue-mode
+web demo (FastAPI + Gradio, deployable to HF Spaces).
 
 ## Layout
 
@@ -160,3 +161,92 @@ From `results.json.failed_episodes` (batch run, finetuned 50k ckpt):
 `task0/seed1` (grasp slips mid-transport), `task0/seed2`, `task1/seed4`,
 `task2/seed4`. Reference eval (seeds 0-2, tasks 0-1) failed only
 `task1/seed2`.
+
+---
+
+# WebVLA M1 — hosted queue-mode demo
+
+M1 puts the validated M0 closed loop behind a web demo: a visitor picks a
+LIBERO task (optionally with their own instruction phrasing), submits it, and
+minutes later watches the recorded episode mp4 with success/failure + stats.
+One job runs at a time; others queue visibly. The M0 CLI scripts are untouched
+and still work.
+
+## Live demo
+
+- Space: https://huggingface.co/spaces/swn21/webvla-libero-octo
+- Checkpoint: https://huggingface.co/swn21/octo-libero-spatial-ft (the M0
+  fine-tuned 50k-step model, uploaded by `deploy/push_ckpt.py`)
+
+## Architecture
+
+```
+browser (Gradio UI, mounted at "/")
+   |  POST /episode {task_id, seed, instruction?}
+   v
+FastAPI (server/app.py)  ---- GET /episode/{job_id} <---- gr.Timer poll (2s)
+   |                        GET /episodes (gallery)
+   |  asyncio.Queue (the ONLY queue; Gradio's own queue is unused)
+   v
+Worker (server/worker.py): env + Octo policy stay loaded between jobs
+   |  closed loop: obs -> action chunk -> execute K steps -> replan
+   v
+episodes/<job>.mp4 + <job>.json  (served back via /episodes static mount)
+```
+
+- `server/jobs.py` — in-memory JobStore; a crashed episode becomes
+  `status=failed` with its traceback, it never kills the worker or the server.
+- `web/ui.py` — Gradio Blocks: task dropdown (+ scene preview images from
+  `assets/scenes/`), seed, optional custom instruction, status polling,
+  result video with SUCCESS / FAILED / UNCHECKED-custom badge, gallery of all
+  past episodes read from `episodes/`.
+- `server/custom_env.py` — CustomInstructionWrapper for custom phrasings
+  (success checker still belongs to the scene's original task → UNCHECKED).
+
+## Run locally
+
+```bash
+bash setup/run.sh -m uvicorn server.app:app --host 0.0.0.0 --port 7860
+# then open http://127.0.0.1:7860/  (API at /episode, /episodes, /healthz)
+```
+
+GPU by default locally; `WEBVLA_BACKEND=cpu` forces CPU inference
+(`JAX_PLATFORMS=cpu`; measured 1.23 s/replan on 2 pinned cores, so episodes
+take a few minutes on CPU).
+
+## Deploy to HF Spaces
+
+```bash
+HF_TOKEN=... HF_HUB_OFFLINE=0 bash setup/run.sh deploy/push_ckpt.py   # once
+HF_TOKEN=... HF_HUB_OFFLINE=0 bash setup/run.sh deploy/push_space.py  # every update
+```
+
+`push_space.py` stages the runtime subset (`server/ web/ runner/ sim/
+policy/ assets/ app.py paths.py`, plus `requirements-space.txt` →
+`requirements.txt`) and pushes it as a Gradio-SDK Space on cpu-basic.
+Notes:
+
+- The Space downloads the fine-tuned checkpoint from the HF model repo above
+  (`WEBVLA_CKPT=hf://...` set by `app.py` via `SPACE_AUTHOR_NAME`).
+- Rendering on the Space is OSMesa (no GPU/EGL there); OSMesa system libs are
+  installed at startup by `server/bootstrap_osmesa.py` (rootless).
+- ZeroGPU was evaluated and dropped: it is Gradio-SDK + PyTorch-only, and the
+  pinned `jaxlib 0.4.20+cudnn89` predates ZeroGPU's Blackwell (sm_120)
+  hardware, so CPU inference on cpu-basic is the supported path.
+- Docker was evaluated and dropped for M1 (local WSL deploy target made it
+  redundant); the pinned-dependency install lives in `requirements-space.txt`.
+- **Deploy status: pending** — HF currently requires a PRO subscription to
+  create Gradio/Docker Spaces on cpu-basic (`402 Payment Required` from the
+  repo-create API). The checkpoint is already public; the Space push is a
+  single command once PRO is active.
+
+## Known limitations (M1)
+
+- Episodes are slow on the Space: CPU-only inference (~1.2 s/replan) means a
+  full episode takes minutes, not seconds.
+- Spaces filesystem is ephemeral: the gallery shows the current container's
+  episodes only; a restart wipes them. No persistence hacks by design.
+- Custom instructions are UNCHECKED and often fail: the policy was fine-tuned
+  on only the 10 LIBERO-Spatial instructions, so novel phrasings usually
+  degrade to the scene's default behavior. That gap is part of the demo.
+- One job at a time, queue is in-memory: a Space restart drops queued jobs.
