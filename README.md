@@ -275,3 +275,34 @@ Notes:
   on only the 10 LIBERO-Spatial instructions, so novel phrasings usually
   degrade to the scene's default behavior. That gap is part of the demo.
 - One job at a time, queue is in-memory: a Space restart drops queued jobs.
+
+---
+
+# WebVLA M2 — live streaming + mid-episode instruction injection
+
+M2 adds two things on top of the M1 demo, without touching the M0/M1 behavior:
+
+- **Live view**: episodes stream frames over WebSocket while they run. The
+  worker (executor thread) JPEG-encodes every frame into a per-job
+  `Broadcaster` (`server/stream.py`, bounded drop-oldest subscriber queues —
+  a slow viewer can't back-pressure the rollout); `WS /ws/jobs/{job_id}`
+  streams them, and a small same-origin page (`server/static/live.html`,
+  served at `/live?job_id=...`) renders them in an iframe inside the Gradio
+  UI (Gradio strips inline scripts — hence the iframe). A polling fallback
+  exists at `GET /episode/{job_id}/frame.jpg`.
+- **Instruction injection**: `POST /episode/{job_id}/instruction` queues a new
+  instruction for a running job; the runner picks it up at the next replan
+  boundary and calls `policy.set_instruction()` (swaps the language
+  conditioning, keeps the history window). Each injection is recorded in
+  metadata `instruction_events` and the episode badge shows UNCHECKED with
+  the change log — the sim success checker still belongs to the original
+  task.
+
+Runner changes are additive-only: `run_episode_frames(..., hooks=None)` is
+byte-identical M0 behavior when no hooks are passed (regression-tested by
+`setup/test_m0_regression.py`).
+
+Verified locally (`setup/test_stream.py`): 221 live frames @ 256x256,
+injection picked up at step 12, 409 on post-completion injection, metadata +
+mp4 intact. Verified on the Space (`deploy/verify_space.py`): 221 frames over
+wss through the HF proxy, episode + mp4 complete.
