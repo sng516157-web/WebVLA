@@ -179,17 +179,21 @@ and still work.
 - Checkpoint: https://huggingface.co/swn21/octo-libero-spatial-ft (the M0
   fine-tuned 50k-step model, uploaded by `deploy/push_ckpt.py`)
 
+![Space UI](assets/space_screenshot.png)
+
 Verified on the live Space (2026-10-12, `deploy/verify_space.py` +
-`deploy/test_space_failure.py`):
+`deploy/test_space_failure.py` + human browser pass):
 
 - `/healthz` ok (cpu backend, warmup done), 10 LIBERO-Spatial tasks listed.
 - Full episode via API: task 0 / seed 0 → done, 220 steps, 135 s wall,
   replan latency mean 1367 ms (CPU), mp4 served as `video/mp4`.
-  The episode itself scored success=false — CPU+OSMesa trajectories diverge
-  numerically from the local GPU+EGL runs (closed-loop chaos), so Space
-  outcomes don't reproduce local success rates seed-for-seed.
+- Human pass (browser): task submitted from the UI → **SUCCESS**, 168 steps,
+  137 s wall, mp4 played in browser (screenshot above).
 - Induced failure (invalid task_id) → `status=failed` with traceback;
   server and worker stayed alive.
+- Note: CPU+OSMesa trajectories diverge numerically from the local GPU+EGL
+  runs (closed-loop chaos), so Space outcomes don't reproduce local success
+  rates seed-for-seed — the same seed can succeed locally and fail there.
 
 ## Architecture
 
