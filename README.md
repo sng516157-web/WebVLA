@@ -367,3 +367,53 @@ render-pipeline fixed overhead, not pixels; see `live/_profile.py`,
 loop already targets real-time 20 Hz, so on a native-Linux GPU box with
 real EGL the same code streams 15-20 fps. Physics is real-time-paced, so
 shoves dissipate naturally.
+
+# WebVLA π0.5 migration — Octo → openpi π0.5 (2026-10-13)
+
+The policy layer is now swappable. **π0.5 (`pi05_libero`, Physical
+Intelligence's official LIBERO fine-tune) is integrated as an alternative
+backend; Octo remains the default and the M0-validated baseline.** Decision,
+motivation and validation discipline: `MIGRATION.md`.
+
+How it works: π0.5 runs in openpi's official policy server (separate venv —
+openpi needs jax 0.5.3, Octo pins jax 0.4.20) and this repo talks to it over
+the official websocket protocol (`policy/pi0_policy.py`, mirroring openpi's
+`examples/libero/main.py`: 224×224 `resize_with_pad` images, 8-D state,
+10-action chunks, 5 executed per replan). The sim, runner, queue server and
+live mode are untouched; each picks the backend via one flag.
+
+## Results (LIBERO-Spatial, this machine)
+
+| eval | success | notes |
+|---|---|---|
+| π0.5 reference (official openpi client, 10 tasks × 3 trials) | **27/30 = 90.0%** | published π0.5 LIBERO avg: 98.8%; log: `results/pi05_reference_eval.log` |
+| π0.5 integrated (`run_batch.py --policy pi05`, tasks 0-2 × seeds 0-4) | **15/15 = 100%** | `results_pi05.json`; replan latency mean 323 ms |
+| Octo fine-tuned baseline (same grid, M0) | 11/15 = 73.3% | `results.json`; replan latency mean 157 ms |
+
+Sanity check (obs keys vs policy-expected keys): MATCH for both backends,
+recorded in each results file.
+
+## Run with π0.5
+
+```bash
+# 1) policy server, once (~5 min load, ~13 GB RAM, wants the whole GPU):
+wsl bash setup/run_pi05_server.sh            # logs: listening on 0.0.0.0:8000
+
+# 2) batch / server / live — Octo stays the default everywhere:
+wsl bash setup/run.sh run_batch.py --policy pi05 --results results_pi05.json
+WEBVLA_POLICY=pi05 wsl bash setup/run.sh -m uvicorn server.app:app --port 7860
+WEBVLA_POLICY=pi05 wsl bash setup/run.sh -m uvicorn live.app:app --port 7870
+```
+
+`WEBVLA_PI05_SERVER=host:port` overrides the default `127.0.0.1:8000`.
+
+## Operational notes (hard-won, details in MIGRATION.md)
+
+- Start the π0.5 server **before** other GPU processes — JAX preallocates
+  ~75% of VRAM and a starved server runs 20× slower.
+- The stock openpi websocket client's 20 s keepalive ping kills connections
+  during the ~20-40 s first-inference XLA compile; `Pi05Policy` disables
+  pings and warms up at init. If you drive the server with the *official*
+  eval client, warm it first (`wsl bash setup/test_pi05_infer.sh`).
+- `setup/run.sh` sets `TF_FORCE_GPU_ALLOW_GROWTH=true` — without it TF
+  reserves ~9 GB at import and starves the policy server.
