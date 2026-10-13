@@ -418,3 +418,74 @@ WEBVLA_POLICY=pi05 wsl bash setup/run.sh -m uvicorn live.app:app --port 7870
   eval client, warm it first (`wsl bash setup/test_pi05_infer.sh`).
 - `setup/run.sh` sets `TF_FORCE_GPU_ALLOW_GROWTH=true` — without it TF
   reserves ~9 GB at import and starves the policy server.
+
+---
+
+# WebVLA π0.5 ZeroGPU Space (2026-10-13)
+
+**Live demo: https://huggingface.co/spaces/swn21/webvla-libero-pi05**
+
+A hosted queue-mode demo of the π0.5 pipeline: pick a LIBERO-Spatial task,
+hit **Run episode**, and minutes later watch the recorded mp4 with
+success/failure and latency stats. One job runs at a time; other visitors
+queue (Gradio's queue, `default_concurrency_limit=1`).
+
+## Why a second Space
+
+The M1 Octo Space (`swn21/webvla-libero-octo`) is a Docker SDK Space on
+cpu-basic — JAX pins (jaxlib 0.4.20+cudnn89) predate ZeroGPU's hardware and
+ZeroGPU is officially PyTorch-only. This Space runs **LeRobot's PyTorch port
+of π0.5** (`lerobot/pi05_libero_finetuned_v044`, a direct port of the openpi
+checkpoint) so inference can run on **ZeroGPU** — the free hosted-GPU tier.
+Same sim, same obs conventions, same closed loop; only the inference runtime
+changed (JAX → PyTorch). The LeRobot path was gated on a local 10-task ×
+3-seed eval before deploying: **30/30 = 100%** (`results_lerobot_pi05.json`,
+vs the JAX reference's 90%/97%). See MIGRATION.md.
+
+## Architecture
+
+```
+browser (Gradio UI)
+  │  pick task/seed → Run episode
+  ▼
+Space main process (CPU)                ZeroGPU worker (A10G)
+  LIBERO sim (mujoco + OSMesa)            π0.5 inference, one
+  episode loop, mp4 encoding     ──────►  @spaces.GPU call per
+  gallery, queue                 ◄──────  action chunk (5 steps)
+                                        numpy in/out via pickle
+```
+
+Model weights (7.5 GB) are loaded at module scope; ZeroGPU packs them at
+startup and streams them into the GPU worker per call. The PaliGemma
+sentencepiece vocab is bundled in the Space repo (the HF tokenizer is
+license-gated). Rendering is OSMesa on the CPU side (rootless deb bootstrap,
+`server/bootstrap_osmesa.py`); the GPU call only does policy inference.
+
+## Quota
+
+ZeroGPU quota is **per visitor** (daily):
+
+| visitor | approx. daily GPU budget |
+|---|---|
+| anonymous | ~2 min |
+| free HF login | ~5 min |
+| PRO | ~40 min |
+
+An episode needs roughly 30-60 s of GPU (one ~0.6 s call per 5-step chunk;
+measured 83 steps / 26 s wall end-to-end on the live Space). Anonymous quota
+is small — logging in (free) is the difference between "maybe one episode"
+and "a few episodes". Quota exhaustion surfaces as a clear message with a
+partial recording, not a stack trace. (An HF_TOKEN secret is also set on the
+Space for faster authenticated model downloads at boot.)
+
+## Known limitations (Space)
+
+- **Ephemeral gallery** — episodes live on the container's disk and vanish
+  on restart/sleep. No persistence, by design.
+- **Cold start** — after sleep, first boot re-downloads the checkpoint and
+  packs weights (~3-4 min) before the UI responds.
+- **Progress, not live video** — the UI shows the latest rendered frame while
+  running and the full mp4 at the end; live streaming stays local (port
+  7870, M2 live mode).
+- **Custom instructions are UNCHECKED** and usually degrade to the scene's
+  default behavior (policy was fine-tuned on the 10 scene instructions only).

@@ -111,6 +111,18 @@ Tokenizer caveat: the checkpoint's tokenizer points at license-gated
 from openpi's asset cache (`WEBVLA_PALIGEMMA_TOKENIZER`, ids verified
 against openpi's encoder). The Space repo bundles that file.
 
+**Space leg (2026-10-13):** deployed as a Gradio SDK ZeroGPU Space,
+https://huggingface.co/spaces/swn21/webvla-libero-pi05 — end-to-end episode
+verified live via the public API (task 0 seed 0, SUCCESS, 83 steps, 26 s
+wall, chunk-inference mean 590 ms). Deployment landmines, all fixed in
+`space/`: ZeroGPU base image force-installs gradio 6.30 (requires
+huggingface-hub>=1.16 vs the fork's declared <1.0 → `policy/_hub_compat.py`
+relaxes the version gate; runtime-verified on hub 1.33/2.2), tokenizers
+0.21.x metadata also pins hub<1.0 (boot `--no-deps` install), Debian pool
+deb versions rotate (OSMesa bootstrap now resolves them dynamically), and
+the LIBERO tarball needs the `weights_only=False` patch applied at extract
+time (`space/bootstrap_libero.py`).
+
 
 ## Operational findings (read before running anything)
 
