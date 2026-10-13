@@ -71,8 +71,14 @@ suspected cause — no workaround code on an unvalidated stack.
   on cookie box") 1/3, task 9 ("bowl on wooden cabinet") 2/3. At n=3 per
   task the confidence interval is wide, the stack integrity checks were all
   clean, and the two weak tasks are known-hard — verdict: not a bad
-  deviation, proceed. An extended 10-trials/task run follows to tighten
-  the estimate.
+  deviation, proceed.
+- **Extended reference eval (official client, 10 tasks × 10 trials):
+  97/100 = 97.0%** (raw log `results/pi05_reference_eval_10trials.log`).
+  Seven tasks 10/10, three tasks 9/10 — within a point of the published
+  98.8% LIBERO-Spatial number. The first attempt at this run silently
+  zeroed all 100 episodes (websocket keepalive death on a GPU-starved
+  server — see Operational findings); the number above is the healthy
+  rerun.
 - **Integration smoke test** (`run_batch.py --policy pi05`, task 0 seed 0):
   SUCCESS in 74 steps; sanity check MATCH (`observation/image`,
   `observation/wrist_image`, `observation/state` shapes as expected);

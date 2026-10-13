@@ -387,6 +387,7 @@ live mode are untouched; each picks the backend via one flag.
 | eval | success | notes |
 |---|---|---|
 | π0.5 reference (official openpi client, 10 tasks × 3 trials) | **27/30 = 90.0%** | published π0.5 LIBERO avg: 98.8%; log: `results/pi05_reference_eval.log` |
+| π0.5 reference, extended (official client, 10 tasks × 10 trials) | **97/100 = 97.0%** | seven tasks 10/10, three tasks 9/10; log: `results/pi05_reference_eval_10trials.log` |
 | π0.5 integrated (`run_batch.py --policy pi05`, tasks 0-2 × seeds 0-4) | **15/15 = 100%** | `results_pi05.json`; replan latency mean 323 ms |
 | Octo fine-tuned baseline (same grid, M0) | 11/15 = 73.3% | `results.json`; replan latency mean 157 ms |
 
