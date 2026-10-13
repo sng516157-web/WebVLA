@@ -47,6 +47,13 @@ import os
 
 import numpy as np
 
+# Must run before the first `import transformers` (see module docstring):
+# on the ZeroGPU image, gradio 6 forces huggingface-hub>=1.16 while the
+# lerobot transformers fork declares <1.0; this relaxes the version gate.
+from . import _hub_compat
+
+_hub_compat.apply()
+
 DEFAULT_MODEL_ID = "lerobot/pi05_libero_finetuned_v044"
 
 # openpi recipe parity with the JAX Pi05Policy: execute 5 of the chunk.

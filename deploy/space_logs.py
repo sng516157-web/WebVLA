@@ -8,7 +8,7 @@ import os
 import sys
 import urllib.request
 
-SPACE = "swn21/webvla-libero-octo"
+SPACE = os.environ.get("WEBVLA_SPACE_ID", "swn21/webvla-libero-octo")
 
 
 def main():

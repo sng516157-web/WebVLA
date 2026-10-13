@@ -33,8 +33,11 @@ torch==2.8.0
 torchvision==0.23.0
 
 # lerobot 0.4.4 runtime deps (hand-picked; lerobot itself installed --no-deps
-# at boot, see above)
-huggingface-hub==0.35.3
+# at boot, see above). huggingface-hub is NOT pinned to 0.35.3 here: the
+# ZeroGPU base image force-installs gradio==6.30.0, which requires hub>=1.16.
+# The transformers fork's <1.0 pin is only a version gate — relaxed at boot
+# by policy/_hub_compat.py (runtime-compatible, verified locally on hub 2.2).
+huggingface-hub>=1.16,<3.0
 einops
 draccus==0.10.0
 safetensors
@@ -53,6 +56,6 @@ av
 # pi05 needs lerobot's patched transformers fork (siglip/gemma hooks)
 transformers @ git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi
 
-# app
-gradio>=5.0,<6.0
-spaces
+# app — gradio and spaces are intentionally NOT listed: the ZeroGPU base
+# image force-installs gradio[oauth,mcp]==6.30.0 + spaces==0.51.3 itself and
+# any pin here makes pip resolution fail. Locally: pip install "gradio==6.30.0" spaces.

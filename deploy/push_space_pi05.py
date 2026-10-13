@@ -61,7 +61,8 @@ def stage():
     # Space never installs) — trim it to what space/app.py actually imports.
     for fn in os.listdir(os.path.join(STAGING, "server")):
         if fn not in ("__init__.py", "bootstrap_osmesa.py"):
-            os.unlink(os.path.join(STAGING, "server", fn))
+            p = os.path.join(STAGING, "server", fn)
+            shutil.rmtree(p) if os.path.isdir(p) else os.unlink(p)
     if not os.path.exists(TOKENIZER_SRC):
         raise SystemExit(
             f"paligemma tokenizer not found at {TOKENIZER_SRC} — the Space "
