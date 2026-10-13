@@ -53,8 +53,12 @@ diffusers>=0.27.2,<0.36.0
 pyserial
 av
 
-# pi05 needs lerobot's patched transformers fork (siglip/gemma hooks)
-transformers @ git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi
+# pi05 needs lerobot's patched transformers fork (siglip/gemma hooks). NOT
+# pip-resolvable here: its declared metadata pins huggingface-hub<1.0, which
+# conflicts with gradio 6.30's hub>=1.16 — app.py installs it --no-deps at
+# boot (deps satisfied below), and policy/_hub_compat.py relaxes its
+# import-time version gate (runtime-verified on hub 2.2).
+tokenizers>=0.21,<0.22
 
 # app — gradio and spaces are intentionally NOT listed: the ZeroGPU base
 # image force-installs gradio[oauth,mcp]==6.30.0 + spaces==0.51.3 itself and
