@@ -91,7 +91,8 @@ class Worker:
             "job_id": job.job_id,
             "backend": self.backend,
             "policy_backend": self.policy_backend,
-            "checkpoint": self.checkpoint,
+            "checkpoint": self.checkpoint if self.policy_backend == "octo"
+            else getattr(self.policy, "server", "pi05"),
         }
         self.env.custom_instruction = job.instruction
         extra_meta["base_task_language"] = self.env.benchmark.get_task(
