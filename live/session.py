@@ -4,7 +4,8 @@ Reuses the validated stack unchanged:
   - sim.wrapper.LiberoWrapper (here constructed with render_size=640 for a
     native-res stream; the policy obs pipeline resizes to 256^2/128^2 exactly
     as in M0 — same FOV, no aspect distortion)
-  - policy.octo_policy.OctoPolicy (act -> (4,7) chunk, receding horizon)
+  - policy: OctoPolicy (default) or Pi05Policy via WEBVLA_POLICY=pi05
+    (act -> action chunk, receding horizon; chunk length is the policy's)
 
 Streamed frames: agentview raw (bottom-up rows) -> rotate 180 (the canonical
 upright view) -> center-crop 640x640 -> 640x480 -> JPEG.
@@ -28,6 +29,14 @@ from PIL import Image
 
 from policy.octo_policy import OctoPolicy
 from sim.wrapper import LiberoWrapper
+
+
+def _build_policy(backend, checkpoint):
+    if backend == "pi05":
+        from policy.pi0_policy import Pi05Policy
+
+        return Pi05Policy()
+    return OctoPolicy(checkpoint)
 
 RENDER = 640                      # square native render
 STREAM_W, STREAM_H = 640, 480     # stream = center crop of the rotated render
@@ -139,10 +148,11 @@ def movable_objects(wrapper):
 class LiveSession(threading.Thread):
     """Owns the env + policy and runs the episode loop off the asyncio loop."""
 
-    def __init__(self, checkpoint, suite_name="libero_spatial"):
+    def __init__(self, checkpoint, suite_name="libero_spatial", policy_backend="octo"):
         super().__init__(daemon=True, name="live-session")
         self.suite_name = suite_name
         self.checkpoint = checkpoint
+        self.policy_backend = policy_backend
         self.wrapper = None
         self.policy = None
         self.hub = FrameHub()
@@ -169,7 +179,7 @@ class LiveSession(threading.Thread):
     def load(self):
         """Heavy init (env class + checkpoint). Call once before start()."""
         self.wrapper = LiberoWrapper(self.suite_name, render_size=RENDER)
-        self.policy = OctoPolicy(self.checkpoint)
+        self.policy = _build_policy(self.policy_backend, self.checkpoint)
 
     def run(self):
         while True:
@@ -246,9 +256,12 @@ class LiveSession(threading.Thread):
         last_log_steps = 0
         last_log_frames = self.hub.frame_id
 
+        # Policy-specific obs view (Octo: obs(); pi05: obs_pi05()); both read
+        # the latest sim state, equivalent to the obs returned by step().
+        obs_fn = getattr(self.wrapper, getattr(self.policy, "OBS_METHOD", "obs"))
         while not self._stop.is_set():
             t0 = time.time()
-            chunk = self.policy.act(obs)
+            chunk = self.policy.act(obs_fn())
             self.replan_latencies.append((time.time() - t0) * 1000.0)
             for action in chunk:
                 if self._stop.is_set():

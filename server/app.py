@@ -54,6 +54,7 @@ async def lifespan(app):
         checkpoint=os.environ.get("WEBVLA_CKPT", DEFAULT_CHECKPOINT),
         episodes_dir=EPISODES_DIR,
         backend=backend,
+        policy_backend=os.environ.get("WEBVLA_POLICY", "octo"),
     )
     app.state.store = store
     app.state.worker = worker

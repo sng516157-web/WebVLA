@@ -1,0 +1,300 @@
+[robosuite WARNING] No private macro file found! (__init__.py:7)
+[robosuite WARNING] It is recommended to use a private macro file (__init__.py:8)
+[robosuite WARNING] To setup, run: python /root/webvla/venv/lib/python3.10/site-packages/robosuite/scripts/setup_macros.py (__init__.py:9)
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+INFO:root:Task suite: libero_spatial
+INFO:root:Waiting for server at ws://0.0.0.0:8000...
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  0%|          | 0/10 [00:00<?, ?it/s]/root/webvla/LIBERO/libero/libero/benchmark/__init__.py:164: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  init_states = torch.load(init_states_path)
+
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl between the plate and the ramekin and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 1
+INFO:root:# successes: 1 (100.0%)
+
+ 33%|███▎      | 1/3 [00:50<01:41, 50.92s/it][AINFO:root:
+Task: pick up the black bowl between the plate and the ramekin and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 2
+INFO:root:# successes: 2 (100.0%)
+
+ 67%|██████▋   | 2/3 [01:22<00:39, 39.74s/it][AINFO:root:
+Task: pick up the black bowl between the plate and the ramekin and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 3
+INFO:root:# successes: 3 (100.0%)
+
+100%|██████████| 3/3 [01:49<00:00, 33.91s/it][A100%|██████████| 3/3 [01:49<00:00, 36.60s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 1.0
+ 10%|█         | 1/10 [01:55<17:15, 115.09s/it]/root/webvla/LIBERO/libero/libero/benchmark/__init__.py:164: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  init_states = torch.load(init_states_path)
+
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl next to the ramekin and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 4
+INFO:root:# successes: 4 (100.0%)
+
+ 33%|███▎      | 1/3 [00:33<01:07, 33.64s/it][AINFO:root:
+Task: pick up the black bowl next to the ramekin and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 5
+INFO:root:# successes: 5 (100.0%)
+
+ 67%|██████▋   | 2/3 [01:04<00:32, 32.02s/it][AINFO:root:
+Task: pick up the black bowl next to the ramekin and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 6
+INFO:root:# successes: 6 (100.0%)
+
+100%|██████████| 3/3 [01:37<00:00, 32.33s/it][A100%|██████████| 3/3 [01:37<00:00, 32.41s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 1.0
+ 20%|██        | 2/10 [03:35<14:10, 106.27s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl from table center and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 7
+INFO:root:# successes: 7 (100.0%)
+
+ 33%|███▎      | 1/3 [00:34<01:09, 34.68s/it][AINFO:root:
+Task: pick up the black bowl from table center and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 8
+INFO:root:# successes: 8 (100.0%)
+
+ 67%|██████▋   | 2/3 [01:08<00:34, 34.47s/it][AINFO:root:
+Task: pick up the black bowl from table center and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 9
+INFO:root:# successes: 9 (100.0%)
+
+100%|██████████| 3/3 [01:37<00:00, 31.90s/it][A100%|██████████| 3/3 [01:37<00:00, 32.61s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 1.0
+ 30%|███       | 3/10 [05:15<12:05, 103.61s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl on the cookie box and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 10
+INFO:root:# successes: 10 (100.0%)
+
+ 33%|███▎      | 1/3 [00:28<00:56, 28.32s/it][AINFO:root:
+Task: pick up the black bowl on the cookie box and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 11
+INFO:root:# successes: 10 (90.9%)
+
+ 67%|██████▋   | 2/3 [01:31<00:48, 48.63s/it][AINFO:root:
+Task: pick up the black bowl on the cookie box and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 12
+INFO:root:# successes: 10 (83.3%)
+
+100%|██████████| 3/3 [02:32<00:00, 54.63s/it][A100%|██████████| 3/3 [02:32<00:00, 50.98s/it]
+INFO:root:Current task success rate: 0.3333333333333333
+INFO:root:Current total success rate: 0.8333333333333334
+ 40%|████      | 4/10 [07:51<12:24, 124.15s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 13
+INFO:root:# successes: 11 (84.6%)
+
+ 33%|███▎      | 1/3 [00:39<01:18, 39.20s/it][AINFO:root:
+Task: pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 14
+INFO:root:# successes: 12 (85.7%)
+
+ 67%|██████▋   | 2/3 [01:19<00:40, 40.07s/it][AINFO:root:
+Task: pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 15
+INFO:root:# successes: 13 (86.7%)
+
+100%|██████████| 3/3 [01:58<00:00, 39.52s/it][A100%|██████████| 3/3 [01:58<00:00, 39.58s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 0.8666666666666667
+ 50%|█████     | 5/10 [09:52<10:15, 123.14s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl on the ramekin and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 16
+INFO:root:# successes: 14 (87.5%)
+
+ 33%|███▎      | 1/3 [00:34<01:09, 34.88s/it][AINFO:root:
+Task: pick up the black bowl on the ramekin and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 17
+INFO:root:# successes: 15 (88.2%)
+
+ 67%|██████▋   | 2/3 [01:10<00:35, 35.44s/it][AINFO:root:
+Task: pick up the black bowl on the ramekin and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 18
+INFO:root:# successes: 16 (88.9%)
+
+100%|██████████| 3/3 [01:42<00:00, 33.99s/it][A100%|██████████| 3/3 [01:42<00:00, 34.33s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 0.8888888888888888
+ 60%|██████    | 6/10 [11:38<07:48, 117.17s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl next to the cookie box and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 19
+INFO:root:# successes: 17 (89.5%)
+
+ 33%|███▎      | 1/3 [00:35<01:10, 35.08s/it][AINFO:root:
+Task: pick up the black bowl next to the cookie box and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 20
+INFO:root:# successes: 18 (90.0%)
+
+ 67%|██████▋   | 2/3 [01:20<00:41, 41.13s/it][AINFO:root:
+Task: pick up the black bowl next to the cookie box and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 21
+INFO:root:# successes: 19 (90.5%)
+
+100%|██████████| 3/3 [01:54<00:00, 37.87s/it][A100%|██████████| 3/3 [01:54<00:00, 38.14s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 0.9047619047619048
+ 70%|███████   | 7/10 [13:35<05:51, 117.15s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl on the stove and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 22
+INFO:root:# successes: 20 (90.9%)
+
+ 33%|███▎      | 1/3 [00:40<01:20, 40.42s/it][AINFO:root:
+Task: pick up the black bowl on the stove and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 23
+INFO:root:# successes: 21 (91.3%)
+
+ 67%|██████▋   | 2/3 [01:21<00:40, 40.95s/it][AINFO:root:
+Task: pick up the black bowl on the stove and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 24
+INFO:root:# successes: 22 (91.7%)
+
+100%|██████████| 3/3 [02:06<00:00, 42.63s/it][A100%|██████████| 3/3 [02:06<00:00, 42.12s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 0.9166666666666666
+ 80%|████████  | 8/10 [15:44<04:01, 120.94s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl next to the plate and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 25
+INFO:root:# successes: 23 (92.0%)
+
+ 33%|███▎      | 1/3 [00:37<01:14, 37.28s/it][AINFO:root:
+Task: pick up the black bowl next to the plate and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 26
+INFO:root:# successes: 24 (92.3%)
+
+ 67%|██████▋   | 2/3 [01:13<00:36, 36.89s/it][AINFO:root:
+Task: pick up the black bowl next to the plate and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 27
+INFO:root:# successes: 25 (92.6%)
+
+100%|██████████| 3/3 [01:49<00:00, 36.14s/it][A100%|██████████| 3/3 [01:49<00:00, 36.38s/it]
+INFO:root:Current task success rate: 1.0
+INFO:root:Current total success rate: 0.9259259259259259
+ 90%|█████████ | 9/10 [17:36<01:58, 118.11s/it]
+  0%|          | 0/3 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the black bowl on the wooden cabinet and place it on the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 28
+INFO:root:# successes: 26 (92.9%)
+
+ 33%|███▎      | 1/3 [00:48<01:36, 48.18s/it][AINFO:root:
+Task: pick up the black bowl on the wooden cabinet and place it on the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 29
+INFO:root:# successes: 26 (89.7%)
+
+ 67%|██████▋   | 2/3 [01:59<01:01, 61.96s/it][AINFO:root:
+Task: pick up the black bowl on the wooden cabinet and place it on the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: True
+INFO:root:# episodes completed so far: 30
+INFO:root:# successes: 27 (90.0%)
+
+100%|██████████| 3/3 [02:42<00:00, 53.20s/it][A100%|██████████| 3/3 [02:42<00:00, 54.19s/it]
+INFO:root:Current task success rate: 0.6666666666666666
+INFO:root:Current total success rate: 0.9
+100%|██████████| 10/10 [20:21<00:00, 132.67s/it]100%|██████████| 10/10 [20:21<00:00, 122.15s/it]
+INFO:root:Total success rate: 0.9
+INFO:root:Total episodes: 30
+Exception ignored in: <function MjRenderContext.__del__ at 0x76bf967a4430>
+Traceback (most recent call last):
+  File "/root/webvla/venv/lib/python3.10/site-packages/robosuite/utils/binding_utils.py", line 199, in __del__
+    self.gl_ctx.free()
+  File "/root/webvla/venv/lib/python3.10/site-packages/robosuite/renderers/context/egl_context.py", line 150, in free
+    EGL.eglDestroyContext(EGL_DISPLAY, self._context)
+  File "/root/webvla/venv/lib/python3.10/site-packages/OpenGL/error.py", line 230, in glCheckError
+    raise self._errorClass(
+OpenGL.raw.EGL._errors.EGLError: EGLError(
+	err = EGL_NOT_INITIALIZED,
+	baseOperation = eglDestroyContext,
+	cArguments = (
+		<OpenGL._opaque.EGLDisplay_pointer object at 0x76bf800ec4c0>,
+		<OpenGL._opaque.EGLContext_pointer object at 0x76bf6ff917c0>,
+	),
+	result = 0
+)
+Exception ignored in: <function EGLGLContext.__del__ at 0x76bf967a4280>
+Traceback (most recent call last):
+  File "/root/webvla/venv/lib/python3.10/site-packages/robosuite/renderers/context/egl_context.py", line 155, in __del__
+    self.free()
+  File "/root/webvla/venv/lib/python3.10/site-packages/robosuite/renderers/context/egl_context.py", line 150, in free
+    EGL.eglDestroyContext(EGL_DISPLAY, self._context)
+  File "/root/webvla/venv/lib/python3.10/site-packages/OpenGL/error.py", line 230, in glCheckError
+    raise self._errorClass(
+OpenGL.raw.EGL._errors.EGLError: EGLError(
+	err = EGL_NOT_INITIALIZED,
+	baseOperation = eglDestroyContext,
+	cArguments = (
+		<OpenGL._opaque.EGLDisplay_pointer object at 0x76bf800ec4c0>,
+		<OpenGL._opaque.EGLContext_pointer object at 0x76bf6ff917c0>,
+	),
+	result = 0
+)

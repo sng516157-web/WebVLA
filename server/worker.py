@@ -51,13 +51,15 @@ class _Hooks:
 
 class Worker:
     def __init__(self, store: JobStore, checkpoint: str, episodes_dir: str,
-                 suite: str = "libero_spatial", exec_horizon: int = 4,
-                 backend: str = "gpu"):
+                 suite: str = "libero_spatial", exec_horizon: int | None = None,
+                 backend: str = "gpu", policy_backend: str = "octo"):
         self.store = store
         self.checkpoint = checkpoint
         self.episodes_dir = episodes_dir
         self.suite = suite
-        self.exec_horizon = exec_horizon
+        self.policy_backend = policy_backend
+        self.exec_horizon = exec_horizon if exec_horizon is not None else (
+            5 if policy_backend == "pi05" else 4)
         self.backend = backend
         self.env = None
         self.policy = None
@@ -67,16 +69,19 @@ class Worker:
     def build(self):
         """Blocking: construct env + policy, then JIT-warm one replan."""
         t0 = time.time()
-        self.env, self.policy = build_stack(self.suite, self.checkpoint)
+        self.env, self.policy = build_stack(self.suite, self.checkpoint,
+                                            policy_backend=self.policy_backend)
         # Same-layout subclass swap: keeps build_stack verbatim while enabling
         # per-job custom instructions (M0 code untouched).
         self.env.__class__ = CustomInstructionWrapper
         obs = self.env.reset(0, 0)
         self.policy.reset(obs["instruction"])
-        self.policy.act(self.env.obs())  # JIT compile; first call is slow
+        obs_fn = getattr(self.env, getattr(self.policy, "OBS_METHOD", "obs"))
+        self.policy.act(obs_fn())  # JIT compile; first call is slow
         self.warmup_done = True
         print(f"[worker] stack built + warmed in {time.time()-t0:.1f}s "
-              f"(backend={self.backend}, checkpoint={self.checkpoint})")
+              f"(backend={self.backend}, policy={self.policy_backend}, "
+              f"checkpoint={self.checkpoint})")
 
     def _run_episode(self, job):
         """Blocking: run one episode via M0's run_and_save, return result."""
@@ -85,6 +90,7 @@ class Worker:
         extra_meta = {
             "job_id": job.job_id,
             "backend": self.backend,
+            "policy_backend": self.policy_backend,
             "checkpoint": self.checkpoint,
         }
         self.env.custom_instruction = job.instruction

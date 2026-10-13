@@ -165,6 +165,31 @@ class LiberoWrapper:
             "instruction": self.instruction,
         }
 
+    def obs_pi05(self):
+        """pi0.5-format observation (openpi examples/libero/main.py, verbatim
+        conventions): agentview + wrist rotated 180, resize_with_pad to 224,
+        8-D state = eef_pos + quat2axisangle(eef_quat) + gripper_qpos,
+        keyed as observation/*."""
+        from openpi_client import image_tools
+
+        raw = self._raw
+        img = np.ascontiguousarray(raw["agentview_image"][::-1, ::-1])
+        wrist = np.ascontiguousarray(raw["robot0_eye_in_hand_image"][::-1, ::-1])
+        img = image_tools.convert_to_uint8(image_tools.resize_with_pad(img, 224, 224))
+        wrist = image_tools.convert_to_uint8(image_tools.resize_with_pad(wrist, 224, 224))
+        return {
+            "observation/image": img,
+            "observation/wrist_image": wrist,
+            "observation/state": np.concatenate(
+                (
+                    raw["robot0_eef_pos"],
+                    quat2axisangle(raw["robot0_eef_quat"]),
+                    raw["robot0_gripper_qpos"],
+                )
+            ),
+            "instruction": self.instruction,
+        }
+
     def check_success(self):
         return bool(self.env.check_success())
 

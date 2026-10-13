@@ -32,6 +32,7 @@ async def lifespan(app):
     session = LiveSession(
         checkpoint=os.environ.get("WEBVLA_CKPT", DEFAULT_CHECKPOINT),
         suite_name=SUITE_NAME,
+        policy_backend=os.environ.get("WEBVLA_POLICY", "octo"),
     )
     session.start()
     await asyncio.to_thread(session.load)  # env class + checkpoint off the event loop

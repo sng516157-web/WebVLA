@@ -12,6 +12,10 @@ export MUJOCO_GL=${MUJOCO_GL:-egl}   # EGL verified working; use MUJOCO_GL=osmes
 export PYOPENGL_PLATFORM=${PYOPENGL_PLATFORM:-$MUJOCO_GL}
 export WANDB_MODE=disabled
 export TOKENIZERS_PARALLELISM=false
+# TF is only used for image resizing (CPU ops); without allow_growth it grabs
+# ~9GB of GPU at init, which starves the pi05 policy server (needs ~10.4GB)
+# and turns 0.3s inferences into 7s ones.
+export TF_FORCE_GPU_ALLOW_GROWTH=${TF_FORCE_GPU_ALLOW_GROWTH:-true}
 # All HF assets (octo-base, t5-base tokenizer) are cached; don't depend on the proxy
 export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
 export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}

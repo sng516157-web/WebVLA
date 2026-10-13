@@ -19,23 +19,33 @@ def main():
     p.add_argument("--suite", default="libero_spatial")
     p.add_argument("--task-ids", type=int, nargs="+", default=[0, 1, 2])
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
-    p.add_argument("--checkpoint", default="hf://rail-berkeley/octo-base-1.5")
-    p.add_argument("--exec-horizon", type=int, default=4)
+    p.add_argument("--policy", choices=["octo", "pi05"], default="octo",
+                   help="pi05 requires the openpi policy server (setup/run_pi05_server.sh)")
+    p.add_argument("--checkpoint", default="hf://rail-berkeley/octo-base-1.5",
+                   help="octo only; ignored for pi05")
+    p.add_argument("--exec-horizon", type=int, default=None,
+                   help="actions executed per replan; default 4 (octo) / 5 (pi05)")
     p.add_argument("--window-size", type=int, default=None,
-                   help="None = infer from checkpoint example_batch (1 for finetuned)")
+                   help="octo only; None = infer from checkpoint example_batch (1 for finetuned)")
     p.add_argument("--out-dir", default=".",
                    help="run_grid appends 'episodes/' itself; '.' -> ./episodes/")
     p.add_argument("--results", default="results.json")
     p.add_argument("--reference", default="reference/reference_results.json")
     args = p.parse_args()
 
-    env, policy = build_stack(args.suite, args.checkpoint, args.window_size)
+    exec_horizon = args.exec_horizon
+    if exec_horizon is None:
+        exec_horizon = 5 if args.policy == "pi05" else 4
+
+    env, policy = build_stack(args.suite, args.checkpoint, args.window_size,
+                              policy_backend=args.policy)
     sanity = sanity_check(env, policy, task_id=args.task_ids[0], seed=args.seeds[0])
 
     results = run_grid(env, policy, args.suite, args.task_ids, args.seeds,
-                       args.out_dir, args.exec_horizon, tag="batch")
+                       args.out_dir, exec_horizon, tag="batch")
     summary = aggregate(results)
     summary["config"] = vars(args)
+    summary["config"]["exec_horizon"] = exec_horizon
     summary["sanity_check"] = sanity
 
     with open(args.results, "w") as f:

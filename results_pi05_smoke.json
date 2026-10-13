@@ -1,0 +1,116 @@
+{
+  "n_episodes": 1,
+  "n_successes": 1,
+  "overall_success_rate": 1.0,
+  "per_task": {
+    "0": {
+      "success_rate": 1.0,
+      "successes": 1,
+      "episodes": 1,
+      "instruction": "pick up the black bowl between the plate and the ramekin and place it on the plate"
+    }
+  },
+  "failed_episodes": [],
+  "latency_ms": {
+    "mean": 309.15,
+    "p50": 294.52,
+    "p95": 384.98,
+    "max": 563.75
+  },
+  "episodes": [
+    {
+      "suite": "libero_spatial",
+      "task_id": 0,
+      "seed": 0,
+      "max_steps": 220,
+      "exec_horizon": 5,
+      "fps": 30,
+      "timestamp_utc": "2026-10-13T09:00:14.409221+00:00",
+      "policy_backend": "pi05",
+      "checkpoint": "127.0.0.1:8000",
+      "unnorm_key": null,
+      "window_size": null,
+      "mujoco_gl": "egl",
+      "gpu": "NVIDIA GeForce RTX 4080 Laptop GPU",
+      "host": "Steven",
+      "tag": "batch",
+      "instruction": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+      "init_state_idx": 0,
+      "success": true,
+      "steps": 74,
+      "wall_time_s": 26.47,
+      "n_replans": 15,
+      "replan_latencies_ms": [
+        563.75,
+        301.42,
+        284.89,
+        281.59,
+        295.55,
+        302.61,
+        281.59,
+        268.39,
+        294.52,
+        276.34,
+        305.65,
+        297.67,
+        308.37,
+        291.06,
+        283.86
+      ],
+      "latency_mean_ms": 309.15,
+      "latency_p50_ms": 294.52,
+      "latency_max_ms": 563.75,
+      "mp4": "libero_spatial__task0__seed0.mp4",
+      "n_frames": 75
+    }
+  ],
+  "config": {
+    "suite": "libero_spatial",
+    "task_ids": [
+      0
+    ],
+    "seeds": [
+      0
+    ],
+    "policy": "pi05",
+    "checkpoint": "hf://rail-berkeley/octo-base-1.5",
+    "exec_horizon": 5,
+    "window_size": null,
+    "out_dir": ".",
+    "results": "results_pi05_smoke.json",
+    "reference": "reference/reference_results.json"
+  },
+  "sanity_check": {
+    "expected": {
+      "observation/image": [
+        224,
+        224,
+        3
+      ],
+      "observation/wrist_image": [
+        224,
+        224,
+        3
+      ],
+      "observation/state": [
+        8
+      ]
+    },
+    "actual": {
+      "observation/image": [
+        224,
+        224,
+        3
+      ],
+      "observation/wrist_image": [
+        224,
+        224,
+        3
+      ],
+      "observation/state": [
+        8
+      ]
+    },
+    "match": true
+  }
+}

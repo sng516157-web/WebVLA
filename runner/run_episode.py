@@ -30,6 +30,7 @@ def run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon, resu
     hooks=None reproduces the M0 behavior exactly.
     """
     t_start = time.time()
+    obs_fn = getattr(env, getattr(policy, "OBS_METHOD", "obs"))
     obs = env.reset(task_id, seed)
     policy.reset(obs["instruction"])
     latencies = []
@@ -51,7 +52,7 @@ def run_episode_frames(env, policy, task_id, seed, max_steps, exec_horizon, resu
                     "at_s": round(time.time() - t_start, 2),
                 })
         t0 = time.perf_counter()
-        actions = policy.act(env.obs())
+        actions = policy.act(obs_fn())
         latencies.append((time.perf_counter() - t0) * 1000.0)
         for a in actions[:exec_horizon]:
             _, _, done, _ = env.step(a)

@@ -11,41 +11,52 @@ import numpy as np
 from runner.run_episode import run_and_save
 
 
-def build_stack(suite_name, checkpoint, window_size=2, unnorm_key=None):
+def build_stack(suite_name, checkpoint=None, window_size=None, unnorm_key=None,
+                policy_backend="octo"):
     from sim.wrapper import LiberoWrapper
-    from policy.octo_policy import OctoPolicy
 
     env = LiberoWrapper(suite_name)
-    policy = OctoPolicy(checkpoint, window_size=window_size, unnorm_key=unnorm_key)
+    if policy_backend == "octo":
+        from policy.octo_policy import OctoPolicy
+
+        policy = OctoPolicy(checkpoint, window_size=window_size, unnorm_key=unnorm_key)
+    elif policy_backend == "pi05":
+        from policy.pi0_policy import Pi05Policy
+
+        policy = Pi05Policy()
+    else:
+        raise ValueError(f"unknown policy backend: {policy_backend!r}")
     return env, policy
 
 
 def sanity_check(env, policy, task_id=0, seed=0):
-    """Compare wrapper obs keys/shapes against the checkpoint's example_batch.
+    """Compare wrapper obs keys/shapes against what the policy consumes.
 
     Prints and returns a dict; mismatches would mean garbage actions, so this
-    is part of the recorded results, not just stdout.
+    is part of the recorded results, not just stdout. Uses the policy's
+    OBS_METHOD (obs for Octo, obs_pi05 for pi0.5) and its expected_observation.
     """
+    obs_fn = getattr(env, getattr(policy, "OBS_METHOD", "obs"))
     obs = env.reset(task_id, seed)
     policy.reset(obs["instruction"])
+    actual_obs = obs_fn()
 
     expected = policy.expected_observation  # e.g. image_primary: (1, window, 256, 256, 3)
     report = {"expected": {}, "actual": {}, "match": True}
     print("=" * 60)
     print("SANITY CHECK: obs camera keys vs policy-expected keys")
     for key, shape in expected.items():
-        if not key.startswith("image_"):
+        if not (key.startswith("image_") or key.startswith("observation/")):
             continue
-        exp_hwc = tuple(shape[-3:])
-        act_hwc = tuple(obs[key].shape) if key in obs else None
-        ok = act_hwc == exp_hwc
+        exp = tuple(shape)
+        act = tuple(actual_obs[key].shape) if key in actual_obs else None
+        # Octo expected shapes carry leading (batch, window) dims; compare HWC tail.
+        exp_hwc = exp[-3:] if len(exp) > 3 or (len(exp) == 3 and key.startswith("image_")) else exp
+        ok = act == exp_hwc or act == exp
         report["expected"][key] = list(exp_hwc)
-        report["actual"][key] = list(act_hwc) if act_hwc else None
+        report["actual"][key] = list(act) if act else None
         report["match"] = report["match"] and ok
-        print(f"  {key}: expected HWC={exp_hwc}  actual HWC={act_hwc}  {'OK' if ok else 'MISMATCH!'}")
-    extra = [k for k, v in obs.items() if isinstance(v, np.ndarray) and not k.startswith("image_")]
-    report["extra_keys_ignored_by_policy"] = extra
-    print(f"  extra obs keys (not consumed by this checkpoint): {extra}")
+        print(f"  {key}: expected={exp_hwc}  actual={act}  {'OK' if ok else 'MISMATCH!'}")
     print(f"  RESULT: {'MATCH' if report['match'] else 'MISMATCH'}")
     print("=" * 60)
     return report
@@ -65,10 +76,12 @@ def gpu_name():
 def run_grid(env, policy, suite_name, task_ids, seeds, out_dir, exec_horizon, tag):
     episodes_dir = os.path.join(out_dir, "episodes")
     os.makedirs(episodes_dir, exist_ok=True)
+    backend = "pi05" if getattr(policy, "OBS_METHOD", "obs") == "obs_pi05" else "octo"
     extra_meta = {
-        "checkpoint": policy.checkpoint,
-        "unnorm_key": policy.unnorm_key,
-        "window_size": policy.window_size,
+        "policy_backend": backend,
+        "checkpoint": getattr(policy, "checkpoint", getattr(policy, "server", None)),
+        "unnorm_key": getattr(policy, "unnorm_key", None),
+        "window_size": getattr(policy, "window_size", None),
         "mujoco_gl": os.environ.get("MUJOCO_GL", "unset"),
         "gpu": gpu_name(),
         "host": platform.node(),
