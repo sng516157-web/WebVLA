@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebVLA live mode</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#181a1b; color:#e8e6e3; margin:16px; }
+  h1 { font-size:18px; margin:0 0 12px; }
+  .row { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+  .panel { background:#25282a; border-radius:8px; padding:12px; }
+  label { font-size:12px; color:#9c9a97; display:block; margin-bottom:2px; }
+  select, input[type=number], input[type=text] { background:#181a1b; color:#e8e6e3;
+    border:1px solid #373a3d; border-radius:4px; padding:6px; font-size:13px; }
+  select { width:420px; } input[type=text] { width:420px; }
+  button { background:#e05d38; color:#fff; border:0; border-radius:4px; padding:8px 14px;
+    font-size:13px; cursor:pointer; }
+  button.secondary { background:#373a3d; }
+  button:disabled { opacity:.4; cursor:default; }
+  #stage { position:relative; width:640px; height:480px; }
+  canvas { border-radius:8px; background:#000; cursor:crosshair; }
+  #status { font-size:13px; margin-top:8px; white-space:pre-wrap; }
+  #badge { font-weight:700; }
+  .ok { color:#57ab5a; } .bad { color:#e5534b; } .dim { color:#9c9a97; }
+</style>
+</head>
+<body>
+<h1>WebVLA — live mode (click the video to shove an object)</h1>
+<div class="row">
+  <div class="panel">
+    <div id="stage"><canvas id="cv" width="640" height="480"></canvas></div>
+    <div id="status" class="dim">connecting…</div>
+  </div>
+  <div class="panel">
+    <label>LIBERO task</label>
+    <select id="task"></select>
+    <div style="height:8px"></div>
+    <label>seed (initial layout)</label>
+    <input type="number" id="seed" value="0" min="0" max="49" style="width:80px">
+    <div style="height:8px"></div>
+    <label>custom instruction (optional — blank = task default)</label>
+    <input type="text" id="instr" placeholder="e.g. pick up the ramekin and place it on the plate">
+    <div style="height:12px"></div>
+    <div class="row">
+      <button id="start">Start</button>
+      <button id="reset" class="secondary">Reset</button>
+      <button id="stop" class="secondary">Stop</button>
+    </div>
+    <div style="height:12px"></div>
+    <label><input type="checkbox" id="push" checked> push objects on click</label>
+    <label><input type="checkbox" id="dots" checked> debug dots (reprojection overlay)</label>
+    <div style="height:8px"></div>
+    <div class="dim" style="font-size:12px;max-width:440px">
+      Dots show where the server thinks your click landed (green = object pushed,
+      red = nothing in range, blue = off the table). If dots match your clicks,
+      pushes are trustworthy.
+    </div>
+  </div>
+</div>
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const statusEl = document.getElementById('status');
+const dots = [];   // {x, y, color, until}
+let ws = null, frames = 0, fpsWindow = [], lastFrameTs = 0;
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.binaryType = 'blob';
+  ws.onmessage = async (ev) => {
+    const bmp = await createImageBitmap(ev.data);
+    ctx.drawImage(bmp, 0, 0);
+    drawDots();
+    const now = performance.now();
+    fpsWindow.push(now);
+    fpsWindow = fpsWindow.filter(t => now - t < 3000);
+    frames++;
+  };
+  ws.onclose = () => setTimeout(connect, 1000);
+}
+
+function drawDots() {
+  const now = performance.now();
+  for (let i = dots.length - 1; i >= 0; i--) {
+    const d = dots[i];
+    if (now > d.until) { dots.splice(i, 1); continue; }
+    if (!document.getElementById('dots').checked) continue;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, 8, 0, 2 * Math.PI);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = d.color;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, 2, 0, 2 * Math.PI);
+    ctx.fillStyle = d.color;
+    ctx.fill();
+  }
+}
+
+cv.addEventListener('click', async (ev) => {
+  const r = cv.getBoundingClientRect();
+  const x = (ev.clientX - r.left) * (cv.width / r.width);
+  const y = (ev.clientY - r.top) * (cv.height / r.height);
+  const resp = await fetch('/click', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({x, y, push: document.getElementById('push').checked}),
+  });
+  if (!resp.ok) { console.log('click rejected', resp.status); return; }
+  const data = await resp.json();
+  console.log('click', data);
+  if (data.reprojected) {
+    const color = data.pushed ? '#57ab5a' : (data.hit_world ? '#e5534b' : '#539bf5');
+    dots.push({x: data.reprojected[0], y: data.reprojected[1], color,
+               until: performance.now() + 2000});
+  }
+});
+
+async function post(path, body) {
+  const resp = await fetch(path, {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  if (!resp.ok) { alert(`${path}: ${resp.status} ${(await resp.json()).detail || ''}`); }
+  return resp.ok;
+}
+
+document.getElementById('start').onclick = () => post('/session/start', {
+  task_id: +document.getElementById('task').value,
+  seed: +document.getElementById('seed').value,
+  instruction: document.getElementById('instr').value || null,
+});
+document.getElementById('reset').onclick = () => post('/session/reset', {
+  seed: +document.getElementById('seed').value,
+  instruction: document.getElementById('instr').value || null,
+});
+document.getElementById('stop').onclick = () => post('/session/stop');
+
+async function poll() {
+  try {
+    const s = await (await fetch('/session')).json();
+    const badge = s.state === 'running'
+      ? (s.success ? '<span id="badge" class="ok">SUCCESS</span>' : '<span id="badge" class="dim">running</span>')
+      : `<span class="dim">${s.state}</span>`;
+    const lat = s.replan_ms.mean ? `replan ${s.replan_ms.mean}ms (p95 ${s.replan_ms.p95})` : 'replan —';
+    let cli = '';
+    for (const [cid, c] of Object.entries(s.clients || {})) {
+      const age = c.sent ? (1000 * c.age_sum / c.sent).toFixed(0) : '—';
+      cli += ` | ws: ${c.sent} sent, ${c.dropped} dropped, age ${age}ms (max ${(1000*c.age_max).toFixed(0)})`;
+    }
+    statusEl.innerHTML =
+      `${badge} — task ${s.task_id ?? '—'}, seed ${s.seed}, steps ${s.steps}, ` +
+      `pushes ${s.pushes}, ${(fpsWindow.length/3).toFixed(1)} fps, ${lat}${cli}`;
+  } catch (e) { /* server restarting */ }
+  setTimeout(poll, 2000);
+}
+
+async function loadTasks() {
+  for (;;) {
+    try {
+      const t = await (await fetch('/tasks')).json();
+      if (t.ready) {
+        const sel = document.getElementById('task');
+        t.tasks.forEach(x => {
+          const o = document.createElement('option');
+          o.value = x.task_id; o.textContent = `${x.task_id}: ${x.language}`;
+          sel.appendChild(o);
+        });
+        return;
+      }
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+loadTasks();
+connect();
+poll();
+</script>
+</body>
+</html>

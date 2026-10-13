@@ -306,3 +306,64 @@ Verified locally (`setup/test_stream.py`): 221 live frames @ 256x256,
 injection picked up at step 12, 409 on post-completion injection, metadata +
 mp4 intact. Verified on the Space (`deploy/verify_space.py`): 221 frames over
 wss through the HF proxy, episode + mp4 complete.
+
+# WebVLA live mode — interactive episodes (click-to-push)
+
+A NEW interactive layer alongside the validated pipeline (nothing in
+`sim/`, `policy/`, `runner/`, `server/` is modified — see `INTEGRATION.md`
+for the seam analysis). One episode runs continuously in a long-lived
+session, streams to the browser over WebSocket, and the viewer can click
+the live video to shove objects while the policy reacts.
+
+## Run
+
+```bash
+# inside WSL, from the repo root (separate process from the M1/M2 server)
+bash setup/run.sh -m uvicorn live.app:app --host 0.0.0.0 --port 7870
+# then open http://localhost:7870/
+```
+
+Pick a task, Start, then click the video: the server unprojects the click
+through the agentview camera (intrinsics + extrinsics read from the sim at
+runtime), intersects the table plane, and applies a velocity impulse to the
+nearest object within 12 cm — a shove, not a teleport. Debug dots (on by
+default) show where the server thinks each click landed: green = object
+pushed, red = nothing in range, blue = off the table.
+
+## How it works
+
+- `live/session.py` — `LiveSession` thread owns its own
+  `LiberoWrapper(render_size=640)` + `OctoPolicy` (same checkpoint and obs
+  pipeline as M0; the policy input is resized to 256^2/128^2 exactly as
+  before). Loop: obs -> policy -> (4,7) chunk -> 20 Hz-paced steps ->
+  replan. Start/reset/stop are commands into the thread; clicks are
+  serialized with sim steps via a lock (qvel writes land between steps).
+- Stream: agentview render (640x640) -> rotate 180 (the canonical upright
+  view) -> center-crop 640x480 -> JPEG -> `FrameHub` (newest-frame-only:
+  one shared slot, slow clients skip frames, never a backlog).
+- `live/app.py` — FastAPI: `GET /` (page), `GET /tasks`, `WS /ws`,
+  `GET /session`, `POST /session/start|reset|stop`, `POST /click`.
+- `live/index.html` — ~150 lines of vanilla JS, no build step.
+
+## Verified
+
+`live/_selftest.py` (in-process, ground truth): every movable object's
+projected pixel -> ray-table hit within 8 mm of its body, reprojection
+round-trip 0.0 px, impulse moves the pushed object and it stays on the
+table. `live/_server_check.py` (against the running server): 10 tasks
+listed, start 200 / double-start 409, 51 frames in 12.2 s with 0 dropped
+and <1 ms mean frame age, click round-trips 0.0 px at 4 points, push
+selects the right object, reset restarts with the new seed, stop returns
+to idle, policy reached success mid-test.
+
+## Known limitation: frame rate on this machine
+
+The spec targets ~10 fps; this machine delivers ~4.3 new frames/s. The cap
+is sim step cost, not the stream: `env.step` is ~220 ms here because WSL2
+has no GPU GL (only Mesa EGL — llvmpipe; OSMesa is similarly CPU-bound),
+and the cost is flat vs resolution (identical at 256^2 and 640^2 —
+render-pipeline fixed overhead, not pixels; see `live/_profile.py`,
+`live/_gltiming.py`). M0's batch runs had the same step rate. The pacing
+loop already targets real-time 20 Hz, so on a native-Linux GPU box with
+real EGL the same code streams 15-20 fps. Physics is real-time-paced, so
+shoves dissipate naturally.
