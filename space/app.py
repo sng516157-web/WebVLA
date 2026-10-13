@@ -65,28 +65,39 @@ def _fork_transformers_installed():
     return False
 
 
+def _pip_no_deps(*pkgs):
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps",
+                    "--quiet", *pkgs], check=True)
+
+
 def _ensure_lerobot():
-    # Both --no-deps: lerobot's pip deps force numpy>=2 (breaks gym 0.25.2),
-    # and the transformers fork declares huggingface-hub<1.0 (conflicts with
-    # gradio 6.30's hub>=1.16 at pip-resolution time). All real deps are in
+    # Everything here is --no-deps, because the Space's pip resolution must
+    # satisfy gradio 6.30's huggingface-hub>=1.16 while lerobot's pip deps
+    # force numpy>=2 (breaks gym 0.25.2), the transformers fork declares
+    # hub<1.0, and tokenizers 0.21.x declares hub<1.0. All real deps are in
     # requirements.txt; policy/_hub_compat.py relaxes the fork's runtime
     # version gate before the first transformers import.
     try:
         import lerobot  # noqa: F401
     except ImportError:
-        import subprocess
-        import sys
         print("[space] installing lerobot==0.4.4 (--no-deps) ...", flush=True)
-        subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps",
-                        "--quiet", "lerobot==0.4.4"], check=True)
+        _pip_no_deps("lerobot==0.4.4")
+    # tokenizers must be in place before the fork is imported (version gate
+    # checks it); 0.21.4 matches the fork's declared >=0.21,<0.22.
+    try:
+        import tokenizers
+        assert tokenizers.__version__ == "0.21.4"
+    except (ImportError, AssertionError):
+        print("[space] installing tokenizers==0.21.4 (--no-deps) ...",
+              flush=True)
+        _pip_no_deps("tokenizers==0.21.4")
     if not _fork_transformers_installed():
-        import subprocess
-        import sys
         print("[space] installing transformers fork (--no-deps) ...", flush=True)
-        subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps",
-                        "--quiet", "--force-reinstall",
-                        "git+https://github.com/huggingface/transformers.git"
-                        "@fix/lerobot_openpi"], check=True)
+        _pip_no_deps("--force-reinstall",
+                     "git+https://github.com/huggingface/transformers.git"
+                     "@fix/lerobot_openpi")
 
 
 _ensure_lerobot()

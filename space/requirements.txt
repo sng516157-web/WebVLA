@@ -58,7 +58,9 @@ av
 # conflicts with gradio 6.30's hub>=1.16 — app.py installs it --no-deps at
 # boot (deps satisfied below), and policy/_hub_compat.py relaxes its
 # import-time version gate (runtime-verified on hub 2.2).
-tokenizers>=0.21,<0.22
+# tokenizers is also NOT pip-resolvable here (0.21.x declares hub<1.0);
+# app.py installs tokenizers==0.21.4 --no-deps at boot before the fork.
+# Its hub usage is hub-download-only, which we never exercise (local vocab).
 
 # app — gradio and spaces are intentionally NOT listed: the ZeroGPU base
 # image force-installs gradio[oauth,mcp]==6.30.0 + spaces==0.51.3 itself and
