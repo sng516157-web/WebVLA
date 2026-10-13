@@ -8,4 +8,5 @@ setup/*.log
 setup/frame*.png
 reference/episodes/
 deploy/_staging/
+deploy/_staging_pi05/
 native_libs/

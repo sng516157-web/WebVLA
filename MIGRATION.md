@@ -86,6 +86,32 @@ suspected cause — no workaround code on an unvalidated stack.
 - **Octo regression**: `setup/test_m0_regression.py` PASSes — the Octo code
   path is behavior-identical after the integration edits.
 
+## LeRobot PyTorch port (for the ZeroGPU Space, 2026-10-13)
+
+ZeroGPU (the free hosted-GPU tier on HF Spaces) is Gradio-SDK-only and
+PyTorch-only (torch 2.8-2.13, Python 3.10/3.12) — the JAX π0.5 stack cannot
+run there. openpi's own PyTorch port pins torch 2.7.1 (below the ZeroGPU
+floor), needs site-packages patching, and has an open JAX↔PyTorch parity
+bug (openpi #810), so we use **LeRobot 0.4.4's PI05Policy**
+(`lerobot/pi05_libero_finetuned_v044`, a direct port of the openpi
+checkpoint) behind `policy/lerobot_pi05_policy.py` — a duck-typed drop-in
+for `Pi05Policy` consuming the same `obs_pi05()` dict. Input conventions
+were verified line-by-line against LeRobot's own LIBERO eval (no 180°
+double-flip, same 8-D state). Venv recipe: `setup/build_venv_lerobot.sh`.
+
+**Validation gate (the decision to proceed):** 10 tasks × 3 seeds on the
+local GPU, `run_batch.py --policy lerobot_pi05` → **30/30 = 100%**
+(`results_lerobot_pi05.json`), obs-key sanity check MATCH, replan latency
+mean 573 ms. Gate was ≥27/30 to match the JAX reference (90%/97%). The
+JAX stack remains the local default; the LeRobot path exists for the
+ZeroGPU Space (and any torch-only host).
+
+Tokenizer caveat: the checkpoint's tokenizer points at license-gated
+`google/paligemma-3b-pt-224`; we load the identical sentencepiece vocab
+from openpi's asset cache (`WEBVLA_PALIGEMMA_TOKENIZER`, ids verified
+against openpi's encoder). The Space repo bundles that file.
+
+
 ## Operational findings (read before running anything)
 
 1. **The π0.5 policy server must own the GPU.** JAX preallocates ~75% of

@@ -1,0 +1,58 @@
+# WebVLA pi05 Space (Gradio SDK + ZeroGPU). Mirrors /root/webvla/venv_lerobot
+# (see setup/build_venv_lerobot.sh). lerobot itself is NOT here: its pip deps
+# force numpy>=2 via opencv-python-headless, which breaks gym 0.25.2. app.py
+# installs it at boot with --no-deps (deterministic, matches the local venv).
+
+numpy==1.26.4
+mujoco==2.3.2
+robosuite==1.4.0
+gym==0.25.2
+bddl==1.0.1
+easydict==1.9
+imageio==2.38.0
+imageio-ffmpeg==0.6.0
+opencv-python==4.6.0.66
+cloudpickle==2.1.0
+h5py==3.16.0
+glfw==2.10.2
+scipy==1.11.4
+matplotlib==3.7.5
+termcolor
+requests
+pynput
+psutil
+future
+
+# resize_image() in sim/wrapper.py imports TF lazily (Octo obs path only;
+# reset() returns that obs dict, so TF must import cleanly)
+tensorflow-cpu==2.15.0
+
+# torch: PyPI linux wheels are CUDA builds; the ZeroGPU runtime supports
+# torch 2.8.0-2.13.x (validated locally on 2.8.0+cu128)
+torch==2.8.0
+torchvision==0.23.0
+
+# lerobot 0.4.4 runtime deps (hand-picked; lerobot itself installed --no-deps
+# at boot, see above)
+huggingface-hub==0.35.3
+einops
+draccus==0.10.0
+safetensors
+deepdiff
+jsonlines
+packaging
+sentencepiece
+protobuf
+gymnasium>=1.1.1,<2.0.0
+datasets>=4.0.0,<5.0.0
+accelerate>=1.10.0,<2.0.0
+diffusers>=0.27.2,<0.36.0
+pyserial
+av
+
+# pi05 needs lerobot's patched transformers fork (siglip/gemma hooks)
+transformers @ git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi
+
+# app
+gradio>=5.0,<6.0
+spaces
