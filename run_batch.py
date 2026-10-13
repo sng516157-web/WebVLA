@@ -19,12 +19,13 @@ def main():
     p.add_argument("--suite", default="libero_spatial")
     p.add_argument("--task-ids", type=int, nargs="+", default=[0, 1, 2])
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
-    p.add_argument("--policy", choices=["octo", "pi05"], default="octo",
-                   help="pi05 requires the openpi policy server (setup/run_pi05_server.sh)")
+    p.add_argument("--policy", choices=["octo", "pi05", "lerobot_pi05"], default="octo",
+                   help="pi05 requires the openpi policy server (setup/run_pi05_server.sh); "
+                   "lerobot_pi05 runs the LeRobot PyTorch port in-process (venv_lerobot)")
     p.add_argument("--checkpoint", default="hf://rail-berkeley/octo-base-1.5",
-                   help="octo only; ignored for pi05")
+                   help="octo only; ignored for pi05/lerobot_pi05")
     p.add_argument("--exec-horizon", type=int, default=None,
-                   help="actions executed per replan; default 4 (octo) / 5 (pi05)")
+                   help="actions executed per replan; default 4 (octo) / 5 (pi05/lerobot_pi05)")
     p.add_argument("--window-size", type=int, default=None,
                    help="octo only; None = infer from checkpoint example_batch (1 for finetuned)")
     p.add_argument("--out-dir", default=".",
@@ -35,7 +36,7 @@ def main():
 
     exec_horizon = args.exec_horizon
     if exec_horizon is None:
-        exec_horizon = 5 if args.policy == "pi05" else 4
+        exec_horizon = 5 if args.policy in ("pi05", "lerobot_pi05") else 4
 
     env, policy = build_stack(args.suite, args.checkpoint, args.window_size,
                               policy_backend=args.policy)

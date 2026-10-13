@@ -24,6 +24,10 @@ def build_stack(suite_name, checkpoint=None, window_size=None, unnorm_key=None,
         from policy.pi0_policy import Pi05Policy
 
         policy = Pi05Policy()
+    elif policy_backend == "lerobot_pi05":
+        from policy.lerobot_pi05_policy import LerobotPi05Policy
+
+        policy = LerobotPi05Policy()
     else:
         raise ValueError(f"unknown policy backend: {policy_backend!r}")
     return env, policy
