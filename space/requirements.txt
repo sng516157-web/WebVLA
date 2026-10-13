@@ -62,6 +62,10 @@ av
 # app.py installs tokenizers==0.21.4 --no-deps at boot before the fork.
 # Its hub usage is hub-download-only, which we never exercise (local vocab).
 
+# sim/wrapper.py obs_pi05() uses openpi_client.image_tools (resize_with_pad).
+# PyPI 0.1.2 image_tools.py verified byte-identical to the validated checkout.
+openpi-client==0.1.2
+
 # app — gradio and spaces are intentionally NOT listed: the ZeroGPU base
 # image force-installs gradio[oauth,mcp]==6.30.0 + spaces==0.51.3 itself and
 # any pin here makes pip resolution fail. Locally: pip install "gradio==6.30.0" spaces.
