@@ -36,12 +36,31 @@ APT_PACKAGES = [
     "zlib1g",
 ]
 
-# Last-resort direct URLs (Debian bookworm, the HF Spaces base lineage).
-DEB_URLS = [
-    "http://deb.debian.org/debian/pool/main/m/mesa/libosmesa6_22.3.6-1+deb12u1_amd64.deb",
-    "http://deb.debian.org/debian/pool/main/m/mesa/libglapi-mesa_22.3.6-1+deb12u1_amd64.deb",
-    "http://deb.debian.org/debian/pool/main/l/llvm-toolchain-14/libllvm14_14.0.6-12_amd64.deb",
-]
+# Direct-URL fallback (Debian pools) for hosts without working apt sources.
+# Versions ROTATE (a point release 404s old filenames — this bit us on
+# ZeroGPU), so we parse the pool listing and pick the current bookworm
+# (+deb12) build at runtime. Bookworm libs also run on newer Debian bases
+# (older glibc requirement). Validated as ar archives before extraction.
+DEB_POOLS = {
+    "libosmesa6": "https://deb.debian.org/debian/pool/main/m/mesa/",
+    "libglapi-mesa": "https://deb.debian.org/debian/pool/main/m/mesa/",
+    "libllvm14": "https://deb.debian.org/debian/pool/main/l/llvm-toolchain-14/",
+}
+
+
+def _resolve_deb_urls():
+    import re
+    import urllib.request
+
+    urls = []
+    for pkg, pool in DEB_POOLS.items():
+        html = urllib.request.urlopen(pool, timeout=30).read().decode()
+        cands = sorted(set(re.findall(rf'{pkg}_([^"/]+)_amd64\.deb', html)))
+        bookworm = [v for v in cands if "+deb12" in v] or cands
+        if not bookworm:
+            raise RuntimeError(f"no {pkg} deb found in {pool}")
+        urls.append(f"{pool}{pkg}_{bookworm[-1]}_amd64.deb")
+    return urls
 
 
 def _log(msg):
@@ -54,6 +73,12 @@ def _system_osmesa_works():
         return True
     except OSError:
         return False
+
+
+def _is_deb(path):
+    # .deb files are ar archives: magic "!<arch>\n"
+    with open(path, "rb") as f:
+        return f.read(8) == b"!<arch>\n"
 
 
 def _download_debs():
@@ -70,17 +95,22 @@ def _download_debs():
         else:
             _log(f"apt-get download {pkg}: skipped ({r.stderr.strip()[:80]})")
     if got == 0:
-        _log("apt-get download unavailable; falling back to hardcoded bookworm URLs")
-        for url in DEB_URLS:
+        urls = _resolve_deb_urls()
+        _log(f"apt-get download unavailable; fetching {len(urls)} debs from Debian pools")
+        for url in urls:
             fn = os.path.join(deb_dir, url.rsplit("/", 1)[-1])
-            if not os.path.exists(fn):
+            if not os.path.exists(fn) or not _is_deb(fn):
                 subprocess.run(["curl", "-sSL", "--retry", "3", url, "-o", fn], check=True)
+            if not _is_deb(fn):
+                raise RuntimeError(f"{fn} is not a deb archive (blocked/proxied download?)")
     for fn in os.listdir(deb_dir):
         if fn.endswith(".deb"):
+            if not _is_deb(os.path.join(deb_dir, fn)):
+                raise RuntimeError(f"{fn} is not a deb archive (blocked/proxied download?)")
             subprocess.run(
                 ["dpkg-deb", "-x", os.path.join(deb_dir, fn), NATIVE_DIR], check=True
             )
-    _log(f"extracted {got or len(DEB_URLS)} debs into {NATIVE_DIR}")
+    _log(f"extracted {got or len(DEB_POOLS)} debs into {NATIVE_DIR}")
 
 
 def _find_libs():
