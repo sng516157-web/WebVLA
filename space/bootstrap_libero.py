@@ -48,6 +48,23 @@ def ensure():
             f"datasets: {TARGET}/libero/datasets\n"
             f"assets: {TARGET}/libero/libero/assets\n"
         )
+    _patch_weights_only(TARGET)
     sys.path.insert(0, TARGET)
     print(f"[libero-bootstrap] LIBERO @ {TARGET}", flush=True)
     return TARGET
+
+
+def _patch_weights_only(target):
+    """torch>=2.6 defaults torch.load(weights_only=True); LIBERO's init-state
+    files are pickled numpy and need False. The tarball is pristine, so apply
+    the same patch our local LIBERO checkout carries. Trusted local data."""
+    bench = os.path.join(target, "libero", "libero", "benchmark", "__init__.py")
+    with open(bench) as f:
+        src = f.read()
+    old = "torch.load(init_states_path)"
+    new = "torch.load(init_states_path, weights_only=False)"
+    if old in src and new not in src:
+        with open(bench, "w") as f:
+            f.write(src.replace(old, new))
+        print("[libero-bootstrap] patched weights_only=False in benchmark/__init__.py",
+              flush=True)
