@@ -336,6 +336,11 @@ class LiveSession(threading.Thread):
                 period = 1.0 / CONTROL_HZ
                 if elapsed < period:
                     time.sleep(period - elapsed)
+                if self.success:
+                    break  # task achieved: end the episode, don't run forever
+
+            if self.success:
+                break
 
             now = time.time()
             if now - last_log >= 5.0:
@@ -348,8 +353,9 @@ class LiveSession(threading.Thread):
             raise _Restart(self._restart)
         self.state = "idle"
         xray.on_episode_end(self, success=self.success)
-        print(f"[live] episode stopped: task={self.task_id} seed={self.seed} "
-              f"steps={self.steps} success={self.success}", flush=True)
+        print(f"[live] episode ended: task={self.task_id} seed={self.seed} "
+              f"steps={self.steps} success={self.success} "
+              f"({'task achieved' if self.success else 'stopped'})", flush=True)
 
     def _log_stats(self, now, window_s, window_steps, window_frames):
         lat = self.replan_latencies[-100:]
