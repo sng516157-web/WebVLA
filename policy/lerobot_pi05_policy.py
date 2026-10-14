@@ -106,6 +106,7 @@ class LerobotPi05Policy:
         self._policy.eval()
 
         tokenizer = _load_paligemma_tokenizer(tokenizer_path)
+        self._tokenizer = tokenizer  # X-Ray: decode text-token positions
         self._preprocess, self._postprocess = make_pre_post_processors(
             cfg,
             model_id,
@@ -181,12 +182,33 @@ class LerobotPi05Policy:
           internals   dict with "denoise_xt" (n_steps, chunk_size, 7) and
                       "heatmap_agentview"/"heatmap_wrist" (256,) per `want`
         """
+        import re
+
         import torch
 
         from .xray_internals import Pi05InternalsCapture
 
         batch = self._preprocess(self._build_batch(obs))
-        with Pi05InternalsCapture(self, want) as cap:
+
+        # Content-word query mask for the attention heatmap: averaging over
+        # ALL text tokens dilutes grounding with scaffold/padding sinks, so
+        # pool attention only from real alphabetic instruction tokens.
+        # Text tokens sit at prefix positions 768+i, right-padded (XRAY_MODEL.md §2).
+        text_query_mask = None
+        tokens = batch.get("observation.language.tokens")
+        tmask = batch.get("observation.language.attention_mask")
+        if tokens is not None:
+            ids = tokens[0].tolist()
+            valid = (tmask[0].tolist() if tmask is not None
+                     else [1] * len(ids))
+            pieces = self._tokenizer.convert_ids_to_tokens(ids)
+            text_query_mask = [
+                bool(v) and bool(re.fullmatch(r"▁?[A-Za-z]{2,}", p))
+                for v, p in zip(valid, pieces)
+            ]
+
+        with Pi05InternalsCapture(self, want,
+                                  text_query_mask=text_query_mask) as cap:
             with torch.inference_mode():
                 chunk = self._policy.predict_action_chunk(batch)
         chunk = self._postprocess(chunk)

@@ -77,9 +77,22 @@ def main():
     hot_x, hot_y = (hot_c + 0.5) * 14, (hot_r + 0.5) * 14
     print(f"hottest patch: (row {hot_r}, col {hot_c}) -> px ({hot_x:.0f},"
           f" {hot_y:.0f})")
+    print(f"overall mean activation: {heat.mean():.3f}")
+    on_object_mass = 0.0
     for name, x, y in marks:
-        d = float(np.hypot(hot_x - x, hot_y - y))
-        print(f"  distance hottest->[{name}]: {d:.0f} px ({d/14:.1f} patches)")
+        r, c = int(y // 14), int(x // 14)
+        v = float(heat[r, c])
+        # mass within a 2-patch radius of this object
+        r0, r1 = max(0, r - 2), min(16, r + 3)
+        c0, c1 = max(0, c - 2), min(16, c + 3)
+        local = float(heat[r0:r1, c0:c1].sum())
+        on_object_mass += local
+        print(f"  [{name}] patch activation {v:.3f} | "
+              f"mass in 2-patch radius {local:.3f}")
+    total = float(heat.sum())
+    print(f"object-region mass share (5 objects, +-2 patches): "
+          f"{on_object_mass / total:.2%} of total; uniform would be "
+          f"{5 * 25 / 256:.2%}")
 
     # render overlay PNG: policy-view frame + heat + markers
     from PIL import Image, ImageDraw

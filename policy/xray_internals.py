@@ -35,10 +35,14 @@ class Pi05InternalsCapture:
     want: subset of {"denoise", "attn_prefix"}. Unknown keys are ignored.
     """
 
-    def __init__(self, wrapper, want=("denoise", "attn_prefix")):
+    def __init__(self, wrapper, want=("denoise", "attn_prefix"),
+                 text_query_mask=None):
         self._wrapper = wrapper            # LerobotPi05Policy
         self._model = wrapper._policy.model  # PI05Pytorch
         self._want = set(want)
+        # (200,) bool: which text positions are content words (None = use
+        # every non-padding position)
+        self._text_query_mask = text_query_mask
         self.denoise_xt_norm = []          # (chunk, 7) normalized, per step
         self._prefix_heat = None           # pooled text->image, (2, 256)
         self._restore = []
@@ -127,10 +131,18 @@ class Pi05InternalsCapture:
                 valid_text = col_ok[text_lo:text_hi]
 
         acc = torch.zeros(2, N_IMG_TOKENS_PER_VIEW, dtype=torch.float32)
+        qmask = self._text_query_mask
+        if qmask is not None and valid_text is not None:
+            qmask = [q and bool(v) for q, v in zip(qmask, valid_text.tolist())]
         for attn in layers:                # (1, heads, 968, 968)
             a = attn[0].to(torch.float32)  # (heads, q, k)
             q_text = a[:, text_lo:text_hi, :]
-            if valid_text is not None:
+            if qmask is not None:
+                sel = torch.tensor(qmask, dtype=torch.bool,
+                                   device=q_text.device)
+                if sel.any():
+                    q_text = q_text[:, sel, :]
+            elif valid_text is not None:
                 q_text = q_text[:, valid_text.to(q_text.device), :]
             # mean over heads and real text queries -> (968,) key profile
             key_profile = q_text.mean(dim=(0, 1))
@@ -142,10 +154,15 @@ class Pi05InternalsCapture:
     # ------------------------------------------------------------- results
     @staticmethod
     def _normalize01(v):
-        lo, hi = float(v.min()), float(v.max())
+        """Percentile-clipped scaling: SigLIP/Gemma attention has strong
+        border-patch sinks; raw min-max lets one sink cell flatten all
+        object-level structure. Clip at p2/p98 so the map shows the
+        distribution over the scene, not the sink. Labeled as such in the UI."""
+        v = np.asarray(v, dtype=np.float32)
+        lo, hi = np.percentile(v, 2), np.percentile(v, 98)
         if hi - lo < 1e-8:
             return np.zeros_like(v, dtype=np.float32)
-        return ((v - lo) / (hi - lo)).astype(np.float32)
+        return np.clip((v - lo) / (hi - lo), 0.0, 1.0)
 
     def denoise_trajectory(self):
         """(n_steps, chunk, 7), unnormalized via the official postprocessor."""
