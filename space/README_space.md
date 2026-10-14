@@ -35,4 +35,13 @@ runs are UNCHECKED (the success checker belongs to the original task).
 **Ephemeral gallery**: episodes are written to the container's disk; the
 gallery resets when the Space restarts or sleeps.
 
+**X-Ray overlays (opt-in)**: tick boxes to draw model internals into the
+episode — the predicted 50-step action path (it executes 5, then replans;
+the far tail can leave the frame because those steps are never actually
+visited), the live 7-D action bars, the replan timeline, the 10-step
+flow-matching denoising convergence (how the trajectory was refined — not
+"intent"), and where instruction tokens attend (attention weights are not
+an explanation of why it acted). Observation is read-only — verified
+action-identical with overlays on vs off.
+
 Source: https://github.com/sng516157-web/WebVLA

@@ -32,6 +32,7 @@ RENAMES = {
     os.path.join("space", "bootstrap_libero.py"): "bootstrap_libero.py",
     os.path.join("space", "requirements.txt"): "requirements.txt",
     os.path.join("space", "README_space.md"): "README.md",
+    os.path.join("space", "xray_overlay.py"): "xray_overlay.py",
 }
 
 # PaliGemma sentencepiece vocab — license-gated on HF, so we ship the file

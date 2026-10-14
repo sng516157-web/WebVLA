@@ -153,15 +153,23 @@ print(f"[space] {len(TASKS)} tasks ready", flush=True)
 
 
 @spaces.GPU(duration=15)
-def infer_chunk(img, wrist, state, instruction):
-    """One action chunk on the GPU worker. Numpy in, numpy out."""
+def infer_chunk(img, wrist, state, instruction, xray=False):
+    """One action chunk on the GPU worker. Numpy in, numpy out.
+
+    xray=True additionally returns the full 50x7 chunk and read-only
+    internals (denoise trajectory + pooled 16x16 attention heatmaps, ~16 KB
+    total). Observation-only: proven action-identical to the plain path by
+    setup/xray_equivalence_check.py (max |dAction| = 0.0).
+    """
     obs = {
         "observation/image": img,
         "observation/wrist_image": wrist,
         "observation/state": state,
     }
     policy.reset(instruction)
-    return policy.act(obs)
+    if not xray:
+        return policy.act(obs)
+    return policy.act_with_internals(obs)
 
 
 # ---------------------------------------------------------------- episode
@@ -181,8 +189,17 @@ def _save_episode(task_id, seed, frames, meta):
     return mp4
 
 
-def run_episode(task_id, seed, custom_instruction, progress=gr.Progress()):
+def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
+                progress=gr.Progress()):
     """Gradio generator: streams progress, ends with the recorded video."""
+    try:
+        from xray_overlay import (  # Space staging: renamed to repo root
+            chunk_waypoints_world, composite, downsample, make_projector)
+    except ImportError:  # running from the repo checkout (space/ subdir)
+        from space.xray_overlay import (
+            chunk_waypoints_world, composite, downsample, make_projector)
+    xray_overlays = xray_overlays or []
+    xray = bool(xray_overlays)
     empty = (None, None, "", None)
     if task_id is None:
         yield (*empty[:3], "Pick a task first.")
@@ -207,9 +224,12 @@ def run_episode(task_id, seed, custom_instruction, progress=gr.Progress()):
     if custom:
         meta["instruction_overridden"] = True
         meta["base_task_language"] = base_language
+    if xray:
+        meta["xray_overlays"] = list(xray_overlays)
 
     frames = [env.render("agentview")]
     latencies = []
+    ticks = []  # X-Ray replan timeline: inference ms per tick
     done = False
     t_start = time.time()
     # env override caps episode length (smoke tests; Spaces can use it to
@@ -221,14 +241,50 @@ def run_episode(task_id, seed, custom_instruction, progress=gr.Progress()):
         while env.steps < max_steps and not done:
             pobs = env.obs_pi05()
             t0 = time.perf_counter()
-            chunk = infer_chunk(pobs["observation/image"],
-                                pobs["observation/wrist_image"],
-                                pobs["observation/state"],
-                                instruction)
-            latencies.append((time.perf_counter() - t0) * 1000.0)
-            for a in chunk:
+            if xray:
+                chunk, full_chunk, internals = infer_chunk(
+                    pobs["observation/image"], pobs["observation/wrist_image"],
+                    pobs["observation/state"], instruction, True)
+            else:
+                chunk = infer_chunk(pobs["observation/image"],
+                                    pobs["observation/wrist_image"],
+                                    pobs["observation/state"], instruction)
+                full_chunk = internals = None
+            lat_ms = (time.perf_counter() - t0) * 1000.0
+            latencies.append(lat_ms)
+            ticks.append(lat_ms)
+
+            wps_px = den_px = heat = None
+            if xray:
+                project = make_projector(env)
+                eef = np.asarray(env._raw["robot0_eef_pos"],
+                                 dtype=np.float64)
+                if "Action path" in xray_overlays:
+                    wps_px = downsample(project(
+                        chunk_waypoints_world(full_chunk, eef)))
+                if ("Denoising steps" in xray_overlays
+                        and internals.get("denoise_xt") is not None):
+                    den_px = [downsample(project(chunk_waypoints_world(xt, eef)))
+                              for xt in internals["denoise_xt"]]
+                if "Grounding heatmap" in xray_overlays:
+                    heat = internals.get("heatmap_agentview")
+
+            for k, a in enumerate(chunk):
                 _, _, done, _ = env.step(a)
-                frames.append(env.render("agentview"))
+                frame = env.render("agentview")
+                if xray:
+                    frame = composite(
+                        frame,
+                        waypoints=wps_px,
+                        progress=((k + 1) / len(chunk))
+                                 * (len(chunk) / len(full_chunk)),
+                        action=a if "Action bars" in xray_overlays else None,
+                        denoise=den_px,
+                        heatmap=heat,
+                        ticks=ticks if "Replan timeline" in xray_overlays
+                        else None,
+                        cur_replan=len(ticks) - 1)
+                frames.append(frame)
                 if done:
                     break
             progress(min(env.steps / max_steps, 1.0),
@@ -340,6 +396,17 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
         label="Custom instruction (optional) — same scene, your words; "
               "custom runs are UNCHECKED (success checker belongs to the "
               "original task)")
+    xray_cb = gr.CheckboxGroup(
+        choices=["Action path", "Action bars", "Replan timeline",
+                 "Denoising steps", "Grounding heatmap"],
+        value=[], label="X-Ray overlays (opt-in) — drawn into the episode")
+    gr.Markdown(
+        "*What they are:* action path = the predicted next-50-action "
+        "end-effector path (the policy executes 5, then replans); denoising "
+        "= how the trajectory was refined over 10 flow-matching steps (not "
+        "'intent'); heatmap = where instruction tokens attend (attention "
+        "weights are *not* an explanation of why it acted). Overlays cost "
+        "a little extra GPU time per replan.")
     status_md = gr.Markdown("idle — submit a job")
     with gr.Row():
         live_img = gr.Image(label="latest frame", elem_id="webvla-live",
@@ -360,7 +427,7 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
         return p if os.path.exists(p) else None
 
     task_dd.change(_scene, task_dd, scene_img)
-    run_btn.click(run_episode, [task_dd, seed_nb, custom_tb],
+    run_btn.click(run_episode, [task_dd, seed_nb, custom_tb, xray_cb],
                   [out_video, live_img, status_md, result_md]
                   ).then(lambda: _gallery_rows(), None, gallery_df)
     gallery_df.select(_gallery_select, None, gallery_video)
