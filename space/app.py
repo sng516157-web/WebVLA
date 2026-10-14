@@ -301,7 +301,7 @@ def _gallery_select(evt: gr.SelectData):
     # Dataframe input into a pandas DataFrame (type="pandas" default), so
     # rows[evt.index[0]] raises KeyError on the string headers — silently,
     # behind the try/except. The filesystem is the source of truth anyway.
-    if evt is None:
+    if evt is None or evt.index is None:
         return None
     rows = _gallery_rows()
     try:
