@@ -361,10 +361,14 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
 
     task_dd.change(_scene, task_dd, scene_img)
     run_btn.click(run_episode, [task_dd, seed_nb, custom_tb],
-                  [out_video, live_img, status_md, result_md])
+                  [out_video, live_img, status_md, result_md]
+                  ).then(lambda: _gallery_rows(), None, gallery_df)
     gallery_df.select(_gallery_select, None, gallery_video)
     refresh_btn = gr.Button("Refresh gallery")
     refresh_btn.click(lambda: _gallery_rows(), None, gallery_df)
+    # value=_gallery_rows() above is evaluated once at app startup; reload
+    # per page load so visitors see episodes recorded after boot.
+    demo.load(lambda: _gallery_rows(), None, gallery_df)
 
 
 if __name__ == "__main__":
