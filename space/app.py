@@ -296,7 +296,14 @@ def _gallery_rows():
     return rows
 
 
-def _gallery_select(evt: gr.SelectData, rows):
+def _gallery_select(evt: gr.SelectData):
+    # Do NOT take gallery_df as an input here: Gradio preprocesses a
+    # Dataframe input into a pandas DataFrame (type="pandas" default), so
+    # rows[evt.index[0]] raises KeyError on the string headers — silently,
+    # behind the try/except. The filesystem is the source of truth anyway.
+    if evt is None:
+        return None
+    rows = _gallery_rows()
     try:
         mp4 = rows[evt.index[0]][-1]
     except Exception:
@@ -355,7 +362,7 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
     task_dd.change(_scene, task_dd, scene_img)
     run_btn.click(run_episode, [task_dd, seed_nb, custom_tb],
                   [out_video, live_img, status_md, result_md])
-    gallery_df.select(_gallery_select, gallery_df, gallery_video)
+    gallery_df.select(_gallery_select, None, gallery_video)
     refresh_btn = gr.Button("Refresh gallery")
     refresh_btn.click(lambda: _gallery_rows(), None, gallery_df)
 
