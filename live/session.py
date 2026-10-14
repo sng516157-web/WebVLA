@@ -96,8 +96,11 @@ class FrameHub:
         with self._cond:
             self._event_subs[cid] = (loop, q)
 
-    def broadcast_event(self, text):
-        """text: pre-encoded envelope JSON string."""
+    def broadcast_event(self, msg_type, payload):
+        """Encode an envelope and fan it out to subscribed clients."""
+        from live import protocol
+
+        text = protocol.encode(msg_type, payload, "server")
         with self._cond:
             subs = list(self._event_subs.values())
         for loop, q in subs:

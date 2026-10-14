@@ -154,8 +154,7 @@ async def ws(websocket: WebSocket):
     hub.register_events(cid, loop, events)
 
     def emit_error(msg):
-        hub.broadcast_event(protocol.encode(
-            "error", {"detail": msg[:300]}, "server"))
+        hub.broadcast_event("error", {"detail": msg[:300]})
 
     router = protocol.CommandRouter()
 
@@ -182,7 +181,7 @@ async def ws(websocket: WebSocket):
         res = session.handle_click(float(p["x"]), float(p["y"]),
                                    bool(p.get("push", True)))
         res["in_reply_to"] = m["id"]
-        hub.broadcast_event(protocol.encode("click.result", res, "server"))
+        hub.broadcast_event("click.result", res)
 
     router.register("pointer.click", _safe(_click))
 

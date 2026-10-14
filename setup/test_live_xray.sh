@@ -35,7 +35,7 @@ with sync_playwright() as pw:
     browser = pw.chromium.launch()
     page = browser.new_page(viewport={"width": 1400, "height": 900})
     page.goto(BASE, wait_until="domcontentloaded")
-    page.wait_for_selector("#task option", timeout=30000)
+    page.wait_for_selector("#task option", state="attached", timeout=30000)
     # record every envelope type seen
     page.evaluate("""() => {
       window.__xrayLog = {};
@@ -56,7 +56,12 @@ with sync_playwright() as pw:
     # click near the middle of the scene (continuous command envelope)
     page.mouse.click(320, 300)
     time.sleep(3)
-    # stop without success -> failure bundle should flush
+    # stop; task 0 seed 0 often SUCCEEDS within 45s on GPU, so the bundle
+    # (failure-only by design) is tested on a second, deliberately short run
+    page.click("#stop")
+    time.sleep(4)
+    page.click("#start")   # same task/seed; 10s cannot succeed
+    time.sleep(10)
     page.click("#stop")
     time.sleep(4)
     log = page.evaluate("window.__xrayLog")
