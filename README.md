@@ -489,3 +489,91 @@ Space for faster authenticated model downloads at boot.)
   7870, M2 live mode).
 - **Custom instructions are UNCHECKED** and usually degrade to the scene's
   default behavior (policy was fine-tuned on the 10 scene instructions only).
+
+---
+
+# X-Ray mode (2026-10-14) — see what the model is doing
+
+Opt-in introspection overlays for live mode (localhost:7870, π0.5 LeRobot
+backend). Clean mode is untouched: with every overlay off, the episode loop
+takes the byte-identical original code path, and a regression gate proves
+observation never changes the policy's actions.
+
+```bash
+# run (CUDA recommended; CPU works):
+wsl  # then, inside WSL:
+WEBVLA_VENV=/root/webvla/venv_lerobot WEBVLA_POLICY=lerobot_pi05 \
+  WEBVLA_LEROBOT_DEVICE=cuda \
+  bash setup/run.sh -m uvicorn live.app:app --host 0.0.0.0 --port 7870
+```
+
+Open http://localhost:7870/ and tick overlays in the **X-Ray** panel.
+What each overlay actually is (honest labels, also shown in the UI):
+
+| overlay | what it shows | what it is NOT |
+|---|---|---|
+| Action path overlay | the predicted next-50-action end-effector path, projected with runtime camera parameters; it executes 5, then replans | not a guarantee of where the arm will go (the controller tracks asymptotically; verified: direction cos 0.962, magnitude lags) |
+| Action bars | the 7-D action vector executing right now | — |
+| Replan timeline | plan ticks vs execution; orange = chunk executing now | — |
+| Denoising convergence | how the action trajectory was refined over the 10 flow-matching Euler steps | not "what the model intends" |
+| Grounding heatmap | where instruction tokens attend (content words only, prefix LM last 6 layers, percentile-scaled) | attention weights are not an explanation of why it acted |
+| Failure bundle | last 5 replans (chunks, denoise trajectories, heatmaps, frames) saved to `live/xray_bundles/` when an episode ends without success | — |
+
+Architecture notes: `XRAY_MODEL.md` (verified internals map). Every
+client<->server websocket message is a versioned envelope
+(`live/protocol.py`); commands distinguish idempotent state-intents
+(deduped) from latest-wins continuous snapshots; the client has a single
+Director object — adding an overlay = register + renderer + one toggle.
+
+## Verification artifacts
+
+- **Equivalence gate** (`setup/xray_equivalence_check.py`): same episode,
+  X-Ray fully on vs off → max |Δaction| = **0.0** (bitwise). Required setup:
+  fresh env per segment (LIBERO's layout RNG seeds once per env instance —
+  same-instance re-resets visibly drift the scene) and pinned torch RNG per
+  replan (flow matching draws noise from the global RNG).
+- **Waypoint frame convention** (`setup/xray_waypoint_check.py`): world-frame
+  deltas confirmed by direction alignment (mean cos 0.962 over executed
+  steps); magnitude mismatch is the impedance controller's tracking lag.
+- **Heatmap sanity** (`setup/xray_heatmap_sanity.py` →
+  `assets/xray/heatmap_sanity.png`): referred objects hot (bowl .80,
+  ramekin .93), unmentioned object cold (cookies .00).
+- **Browser e2e** (`setup/test_live_xray.sh`): all overlays streamed in a
+  real headless-Chromium session (21+ replans, 148 frames), click-to-push
+  over the envelope protocol, failure bundle flushed and reloaded from disk;
+  screenshot `assets/xray/live_all_overlays.png`.
+
+## Performance (RTX 4080 Laptop, CUDA, bf16)
+
+| path | mean | p95 |
+|---|---|---|
+| `act()` per replan | 489 ms | 509 ms |
+| `act_with_internals()` (all captures on) | 499 ms | 519 ms |
+| **added** | **+10 ms** | +33 ms max |
+
+Budget was <50 ms/replan and <15% wall-clock; measured +2% wall equivalent
+(steps are real-time paced at 20 Hz, so only replan overhead counts).
+Measured by `setup/xray_perf.py`.
+
+# Related Work
+
+- **Web-Gewu** (Ye et al., "Web-Gewu: A Browser-Based Interactive Playground
+  for Robot Reinforcement Learning," arXiv:2604.17050, 2026): hosted
+  browser-based RL education platform with a WebRTC cloud-edge-client
+  architecture for locomotion. Targets reinforcement learning rather than
+  VLA manipulation and does not expose model-internal decision mechanisms;
+  we adopt its envelope-protocol and command-semantics UX patterns for our
+  X-Ray layer.
+- **Octo** (octo-models/octo): our M0 policy baseline (fine-tuned in-repo,
+  see TRAINING.md); superseded by π0.5 as the default demo policy.
+- **π0.5 / openpi** (Physical Intelligence): the current policy
+  (`pi05_libero` fine-tune); we run the LeRobot PyTorch port and add the
+  read-only introspection hooks (denoising trajectory, attention pooling)
+  that X-Ray visualizes.
+- **LeRobot** (Hugging Face): supplies the PyTorch π0.5 port, checkpoint and
+  pre/post-processing pipeline we validate against the JAX reference.
+- **LIBERO** (LifelongRobotLearning): the simulation benchmark and success
+  checkers all episodes run on.
+- **OpenVLA**: open VLA baseline whose LIBERO eval harness conventions
+  (env setup, init-state pinning) our sim wrapper follows; it has no hosted
+  interactive demo or introspection layer.
