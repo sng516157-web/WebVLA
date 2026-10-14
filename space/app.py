@@ -382,7 +382,10 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
         "**GPU quota:** anonymous ~2 min/day, free login ~5 min/day, "
         "PRO ~40 min/day. An episode needs roughly 1-2 min of GPU. "
         "Episodes are recorded to the container's ephemeral disk — the "
-        "gallery below resets when the Space restarts."
+        "gallery below resets when the Space restarts.\n\n"
+        "**New — X-Ray mode:** tick overlays below to see the model's "
+        "plan, attention, and denoising drawn onto the episode as it runs "
+        "(expand *What is X-Ray?* for a guide)."
     )
     with gr.Row():
         task_dd = gr.Dropdown(choices=TASKS, label="LIBERO task (scene)",
@@ -400,13 +403,40 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
         choices=["Action path", "Action bars", "Replan timeline",
                  "Denoising steps", "Grounding heatmap"],
         value=[], label="X-Ray overlays (opt-in) — drawn into the episode")
-    gr.Markdown(
-        "*What they are:* action path = the predicted next-50-action "
-        "end-effector path (the policy executes 5, then replans); denoising "
-        "= how the trajectory was refined over 10 flow-matching steps (not "
-        "'intent'); heatmap = where instruction tokens attend (attention "
-        "weights are *not* an explanation of why it acted). Overlays cost "
-        "a little extra GPU time per replan.")
+    with gr.Accordion("What is X-Ray? (read me first)", open=False):
+        gr.Markdown(
+            "This demo runs a **vision-language-action model in closed "
+            "loop**. The loop, plain and simple: look at the scene → imagine "
+            "the next 50 actions → execute only the first 5 → look again. "
+            "X-Ray draws that hidden machinery onto the video so you can "
+            "watch the model think.\n\n"
+            "**How to read each overlay:**\n\n"
+            "- **Action path** — the line of dots is where the model's "
+            "*imagined* 50-step plan would take the gripper. Only the first "
+            "fifth (blue, up to the fade) is ever executed; the rest is "
+            "imagination under uncertainty, and it can leave the frame — "
+            "that's real, not a bug. Watch how the path changes every "
+            "replan: that's closed-loop correction.\n"
+            "- **Action bars** — the raw 7 numbers the robot executes right "
+            "now: 3 for position, 3 for rotation, 1 for the gripper "
+            "(green/red = direction). This is the model's entire output, no "
+            "abstraction.\n"
+            "- **Replan timeline** — one tick per \"look again\" moment; "
+            "height = how long inference took, orange = the chunk executing "
+            "now. Makes the loop's rhythm visible.\n"
+            "- **Denoising steps** — the model is a *flow-matching* policy: "
+            "each plan starts as random noise and is refined over 10 steps. "
+            "The magenta lines show the plan converging from noise (faint) "
+            "to final (solid). It shows how the trajectory was refined — "
+            "not what the model 'intends'.\n"
+            "- **Grounding heatmap** — which image patches the instruction's "
+            "words pay attention to (orange = more). It should light up on "
+            "the objects named in the task. Careful: attention weights show "
+            "*where the model attends*, not *why it acted* — they're a "
+            "hint, not an explanation.\n\n"
+            "*All overlays are read-only observations of the model — "
+            "verified not to change its actions (bitwise-equivalence "
+            "tested). They add a small amount of GPU time per replan.*")
     status_md = gr.Markdown("idle — submit a job")
     with gr.Row():
         live_img = gr.Image(label="latest frame", elem_id="webvla-live",
