@@ -577,3 +577,15 @@ Measured by `setup/xray_perf.py`.
 - **OpenVLA**: open VLA baseline whose LIBERO eval harness conventions
   (env setup, init-state pinning) our sim wrapper follows; it has no hosted
   interactive demo or introspection layer.
+
+## X-Ray on the Space
+
+The same overlays are available on the public Space as an opt-in checkbox
+group (drawn into the live preview and the recorded mp4; the envelope/
+Director patterns are live-mode-only — Gradio owns its socket, so the Space
+composites server-side). Measured on ZeroGPU (A10G): 402.6 ms/chunk with all
+overlays on vs 396.5-580.8 ms clean across runs — inside run-to-run
+variance, so no meaningful quota cost. Verified end-to-end on the public
+deployment: `assets/xray/space_live_overlay.png` (all overlays) vs
+`assets/xray/space_clean_frame.png` (default experience unchanged);
+`setup/test_space_xray.sh`.
