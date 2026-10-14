@@ -46,13 +46,13 @@ class Pi05InternalsCapture:
     # ------------------------------------------------------------ hooks
     def _patch(self, obj, name, fn):
         orig = getattr(obj, name)          # bound method (class attr)
-        self._restore.append((obj, name, orig))
+        self._restore.append((obj, name, orig, "method"))
         object.__setattr__(obj, name, fn)  # instance attr shadows the method
         return orig
 
     def _patch_config(self, cfg, name, value):
         old = getattr(cfg, name)
-        self._restore.append((cfg, name, old))
+        self._restore.append((cfg, name, old, "config"))
         setattr(cfg, name, value)
 
     def __enter__(self):
@@ -74,6 +74,10 @@ class Pi05InternalsCapture:
 
         if "attn_prefix" in self._want:
             lm = self._model.paligemma_with_expert.paligemma.language_model
+            # sample_actions forces eager at modeling_pi05.py:811 but only
+            # DURING the call; the output_attentions setter validates against
+            # _attn_implementation, so apply the same forcing first.
+            self._patch_config(lm.config, "_attn_implementation", "eager")
             self._patch_config(lm.config, "output_attentions", True)
 
             def lm_forward_wrapper(*args, **kwargs):
@@ -86,8 +90,8 @@ class Pi05InternalsCapture:
         return self
 
     def __exit__(self, *exc):
-        for obj, name, orig in reversed(self._restore):
-            if name == "output_attentions":
+        for obj, name, orig, kind in reversed(self._restore):
+            if kind == "config":
                 setattr(obj, name, orig)
             else:
                 # restore class-method lookup by removing the instance attr

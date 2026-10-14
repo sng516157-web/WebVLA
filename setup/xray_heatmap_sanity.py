@@ -29,7 +29,13 @@ OUT = os.path.join(paths.REPO_ROOT, "assets", "xray", "heatmap_sanity.png")
 
 
 def project_policy_px(env, point, size=256):
-    """world point -> (x, y) in the 224x224 policy image (rotate180 of raw)."""
+    """world point -> (x, y) in the 224x224 policy image (rotate180 of raw).
+
+    Verified against live/session.py CameraGeometry (selftest-validated):
+    raw array row rr = v (rows bottom-up), rotated row r = size-1-v,
+    rotated col c = size-1-u. The earlier version of this function had x/y
+    swapped and failed exactly this sanity check.
+    """
     sim = env.env.sim
     cam_id = sim.model.camera_name2id("agentview")
     pos = np.asarray(sim.data.cam_xpos[cam_id])
@@ -37,9 +43,10 @@ def project_policy_px(env, point, size=256):
     fovy = np.deg2rad(float(sim.model.cam_fovy[cam_id]))
     f = (size / 2.0) / np.tan(fovy / 2.0)
     pc = mat.T @ (np.asarray(point, dtype=np.float64) - pos)
-    u = f * pc[0] / (-pc[2]) + size / 2.0   # raw: x right
-    v = f * pc[1] / (-pc[2]) + size / 2.0   # raw: y UP (rows bottom-up)
-    col_pol, row_pol = v, (size - 1.0) - u  # rotate180
+    u = f * pc[0] / (-pc[2]) + size / 2.0   # camera x right
+    v = f * pc[1] / (-pc[2]) + size / 2.0   # camera y up (raw rows bottom-up)
+    col_pol = (size - 1.0) - u
+    row_pol = (size - 1.0) - v
     return col_pol * (224.0 / size), row_pol * (224.0 / size)
 
 
