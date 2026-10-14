@@ -171,3 +171,33 @@ class LerobotPi05Policy:
             f"policy returned {len(chunk)} actions, need {self.replan_steps}"
         )
         return chunk[: self.replan_steps]
+
+    def act_with_internals(self, obs, want=("denoise", "attn_prefix")):
+        """act()'s exact code path, observed by Pi05InternalsCapture.
+
+        Returns (exec_chunk, full_chunk, internals):
+          exec_chunk  (replan_steps, 7) — identical to what act() returns
+          full_chunk  (chunk_size, 7)   — the whole predicted trajectory
+          internals   dict with "denoise_xt" (n_steps, chunk_size, 7) and
+                      "heatmap_agentview"/"heatmap_wrist" (256,) per `want`
+        """
+        import torch
+
+        from .xray_internals import Pi05InternalsCapture
+
+        batch = self._preprocess(self._build_batch(obs))
+        with Pi05InternalsCapture(self, want) as cap:
+            with torch.inference_mode():
+                chunk = self._policy.predict_action_chunk(batch)
+        chunk = self._postprocess(chunk)
+        full = np.asarray(chunk[0], dtype=np.float32)
+        assert len(full) >= self.replan_steps, (
+            f"policy returned {len(full)} actions, need {self.replan_steps}"
+        )
+        internals = {"chunk_size": int(full.shape[0])}
+        if "denoise" in want:
+            traj = cap.denoise_trajectory()
+            if traj is not None:
+                internals["denoise_xt"] = traj
+        internals.update(cap.heatmaps())
+        return full[: self.replan_steps], full, internals

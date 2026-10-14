@@ -36,6 +36,10 @@ def _build_policy(backend, checkpoint):
         from policy.pi0_policy import Pi05Policy
 
         return Pi05Policy()
+    if backend == "lerobot_pi05":
+        from policy.lerobot_pi05_policy import LerobotPi05Policy
+
+        return LerobotPi05Policy()
     return OctoPolicy(checkpoint)
 
 RENDER = 640                      # square native render
@@ -51,7 +55,11 @@ PUSH_SPEED_MPS = 1.0              # planar velocity impulse magnitude
 
 
 class FrameHub:
-    """Newest-frame-only fanout. One shared slot; slow clients skip frames."""
+    """Newest-frame-only fanout. One shared slot; slow clients skip frames.
+
+    Also fans out JSON event envelopes (X-Ray): each subscribed client's
+    asyncio queue gets a thread-safe put; the ws handler drains it.
+    """
 
     def __init__(self):
         self._cond = threading.Condition()
@@ -59,6 +67,7 @@ class FrameHub:
         self.jpeg = None
         self.ts = 0.0
         self.clients = {}  # id -> stats dict
+        self._event_subs = {}  # id -> (asyncio loop, asyncio.Queue)
 
     def publish(self, jpeg, ts):
         with self._cond:
@@ -81,6 +90,21 @@ class FrameHub:
     def unregister(self, cid):
         with self._cond:
             self.clients.pop(cid, None)
+            self._event_subs.pop(cid, None)
+
+    def register_events(self, cid, loop, q):
+        with self._cond:
+            self._event_subs[cid] = (loop, q)
+
+    def broadcast_event(self, text):
+        """text: pre-encoded envelope JSON string."""
+        with self._cond:
+            subs = list(self._event_subs.values())
+        for loop, q in subs:
+            try:
+                loop.call_soon_threadsafe(q.put_nowait, text)
+            except RuntimeError:
+                pass  # client loop already gone
 
     def client_stats(self):
         with self._cond:
@@ -173,6 +197,10 @@ class LiveSession(threading.Thread):
         self._lock = threading.Lock()  # guards env access for clicks
         self._cam = None
         self._table_z = None
+        self.last_frame_rgb = None  # latest upright frame (for X-Ray bundle)
+        from live.xray.engine import XRayEngine
+
+        self.xray = XRayEngine(self.hub.broadcast_event)
 
     # ---- lifecycle ------------------------------------------------------
 
@@ -191,7 +219,12 @@ class LiveSession(threading.Thread):
                     self._episode_loop(params)
                 except Exception:
                     import traceback
+                    tb = traceback.format_exc()
                     traceback.print_exc()
+                    try:
+                        self.xray.on_episode_end(self, success=False, error=tb)
+                    except Exception:
+                        pass
                     self.state = "idle"
 
     def request_start(self, task_id, seed, instruction=None):
@@ -259,11 +292,24 @@ class LiveSession(threading.Thread):
         # Policy-specific obs view (Octo: obs(); pi05: obs_pi05()); both read
         # the latest sim state, equivalent to the obs returned by step().
         obs_fn = getattr(self.wrapper, getattr(self.policy, "OBS_METHOD", "obs"))
+        xray = self.xray
         while not self._stop.is_set():
             t0 = time.time()
-            chunk = self.policy.act(obs_fn())
-            self.replan_latencies.append((time.time() - t0) * 1000.0)
-            for action in chunk:
+            if xray.active and hasattr(self.policy, "act_with_internals"):
+                # READ-ONLY: proven equivalent to act() by
+                # setup/xray_equivalence_check.py
+                chunk, full_chunk, internals = self.policy.act_with_internals(
+                    obs_fn(), want=xray.want())
+            else:
+                chunk = self.policy.act(obs_fn())
+                full_chunk, internals = chunk, {}
+            lat_ms = (time.time() - t0) * 1000.0
+            self.replan_latencies.append(lat_ms)
+            if xray.active:
+                with self._lock:
+                    self._cam.refresh()
+                xray.on_replan(self, chunk, full_chunk, internals, lat_ms)
+            for k, action in enumerate(chunk):
                 if self._stop.is_set():
                     break
                 step_start = time.time()
@@ -276,9 +322,12 @@ class LiveSession(threading.Thread):
                         self.success = True
                     frame = self.wrapper.render("agentview")
                 crop = frame[CROP_Y0:CROP_Y0 + STREAM_H]
+                self.last_frame_rgb = crop
                 buf = io.BytesIO()
                 Image.fromarray(crop).save(buf, format="JPEG", quality=JPEG_QUALITY)
                 self.hub.publish(buf.getvalue(), time.time())
+                if xray.active:
+                    xray.on_step(k, action)
                 # pace sim to real time (20 Hz control)
                 elapsed = time.time() - step_start
                 period = 1.0 / CONTROL_HZ
@@ -292,8 +341,10 @@ class LiveSession(threading.Thread):
                 last_log, last_log_steps, last_log_frames = now, self.steps, self.hub.frame_id
 
         if self._restart is not None:
+            xray.on_episode_end(self, success=self.success)
             raise _Restart(self._restart)
         self.state = "idle"
+        xray.on_episode_end(self, success=self.success)
         print(f"[live] episode stopped: task={self.task_id} seed={self.seed} "
               f"steps={self.steps} success={self.success}", flush=True)
 

@@ -18,16 +18,24 @@
   button:disabled { opacity:.4; cursor:default; }
   #stage { position:relative; width:640px; height:480px; }
   canvas { border-radius:8px; background:#000; cursor:crosshair; }
+  #overlay { position:absolute; left:0; top:0; pointer-events:none; background:transparent; }
   #status { font-size:13px; margin-top:8px; white-space:pre-wrap; }
   #badge { font-weight:700; }
   .ok { color:#57ab5a; } .bad { color:#e5534b; } .dim { color:#9c9a97; }
+  .xray-toggle { display:flex; gap:6px; align-items:baseline; margin:3px 0; }
+  .xray-toggle input { margin:0; }
+  .xray-toggle .what { font-size:11px; color:#9c9a97; }
+  .xray-head { font-size:13px; font-weight:600; color:#e8e6e3; margin-bottom:4px; }
 </style>
 </head>
 <body>
 <h1>WebVLA — live mode (click the video to shove an object)</h1>
 <div class="row">
   <div class="panel">
-    <div id="stage"><canvas id="cv" width="640" height="480"></canvas></div>
+    <div id="stage">
+      <canvas id="cv" width="640" height="480"></canvas>
+      <canvas id="overlay" width="640" height="480"></canvas>
+    </div>
     <div id="status" class="dim">connecting…</div>
   </div>
   <div class="panel">
@@ -48,35 +56,83 @@
     <div style="height:12px"></div>
     <label><input type="checkbox" id="push" checked> push objects on click</label>
     <label><input type="checkbox" id="dots" checked> debug dots (reprojection overlay)</label>
-    <div style="height:8px"></div>
     <div class="dim" style="font-size:12px;max-width:440px">
       Dots show where the server thinks your click landed (green = object pushed,
-      red = nothing in range, blue = off the table). If dots match your clicks,
-      pushes are trustworthy.
+      red = nothing in range, blue = off the table).
+    </div>
+  </div>
+  <div class="panel" style="max-width:300px">
+    <div class="xray-head">X-Ray — see what the model is doing</div>
+    <div class="xray-toggle"><input type="checkbox" data-xray="waypoints">
+      <span>Action path overlay<br><span class="what">the predicted next-50-action
+      end-effector path — it executes 5, then replans</span></span></div>
+    <div class="xray-toggle"><input type="checkbox" data-xray="bars">
+      <span>Action bars<br><span class="what">the 7-D action vector executing
+      right now</span></span></div>
+    <div class="xray-toggle"><input type="checkbox" data-xray="timeline">
+      <span>Replan timeline<br><span class="what">plan ticks vs execution;
+      orange = the chunk running now</span></span></div>
+    <div class="xray-toggle"><input type="checkbox" data-xray="denoise">
+      <span>Denoising convergence<br><span class="what">how the trajectory was
+      refined over 10 flow-matching steps — not "what the model
+      intends"</span></span></div>
+    <div class="xray-toggle"><input type="checkbox" data-xray="heatmap">
+      <span>Grounding heatmap<br><span class="what">where instruction tokens
+      attend — attention weights are not an explanation of why it
+      acted</span></span></div>
+    <div class="xray-toggle"><input type="checkbox" data-xray="bundle">
+      <span>Failure bundle<br><span class="what">keep the last 5 replans; save
+      them if the episode fails</span></span></div>
+    <div id="bundle-note" class="dim" style="font-size:11px;margin-top:6px"></div>
+    <div class="dim" style="font-size:11px;margin-top:8px">
+      X-Ray observes the model read-only (equivalence-gated: actions are
+      identical with it on or off). Computation happens on replan ticks only.
+      π0.5 backend only for denoise/heatmap.
     </div>
   </div>
 </div>
+<script src="/xray.js"></script>
 <script>
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
+const ov = document.getElementById('overlay');
+const octx = ov.getContext('2d');
 const statusEl = document.getElementById('status');
 const dots = [];   // {x, y, color, until}
-let ws = null, frames = 0, fpsWindow = [], lastFrameTs = 0;
+let frames = 0, fpsWindow = [];
 
-function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
-  ws.binaryType = 'blob';
-  ws.onmessage = async (ev) => {
-    const bmp = await createImageBitmap(ev.data);
-    ctx.drawImage(bmp, 0, 0);
-    drawDots();
-    const now = performance.now();
-    fpsWindow.push(now);
-    fpsWindow = fpsWindow.filter(t => now - t < 3000);
-    frames++;
-  };
-  ws.onclose = () => setTimeout(connect, 1000);
-}
+/* ---- X-Ray viz registration (adding a viz = register + checkbox) ---- */
+const vizList = [
+  makeWaypointViz(), makeBarsViz(), makeTimelineViz(),
+  makeDenoiseViz(), makeHeatmapViz(640, 80), makeBundleViz(),
+];
+vizList.forEach(v => Director.registerViz(v));
+document.querySelectorAll('[data-xray]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const v = vizList.find(x => x.name === cb.dataset.xray);
+    v.enabled = cb.checked;
+    Director.send('xray.toggle', {overlay: cb.dataset.xray, enabled: cb.checked});
+    if (!cb.checked) Director.drawOverlays(octx, ov.width, ov.height);
+  });
+});
+Director.on('xray.bundle', env => {
+  const el = document.getElementById('bundle-note');
+  el.textContent = `failure bundle: ${env.payload.path} (${env.payload.kept} replans)`;
+});
+Director.on('error', env => statusEl.innerHTML =
+  `<span class="bad">server: ${env.payload.detail}</span>`);
+
+/* ---- video + overlay render ---- */
+Director.videoCb = (bmp) => {
+  ctx.drawImage(bmp, 0, 0);
+  drawDots();
+  Director.drawOverlays(octx, ov.width, ov.height);
+  const now = performance.now();
+  fpsWindow.push(now);
+  fpsWindow = fpsWindow.filter(t => now - t < 3000);
+  frames++;
+};
+Director.connect(`ws://${location.host}/ws`);
 
 function drawDots() {
   const now = performance.now();
@@ -86,28 +142,24 @@ function drawDots() {
     if (!document.getElementById('dots').checked) continue;
     ctx.beginPath();
     ctx.arc(d.x, d.y, 8, 0, 2 * Math.PI);
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = d.color;
-    ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = d.color; ctx.stroke();
     ctx.beginPath();
     ctx.arc(d.x, d.y, 2, 0, 2 * Math.PI);
-    ctx.fillStyle = d.color;
-    ctx.fill();
+    ctx.fillStyle = d.color; ctx.fill();
   }
 }
 
-cv.addEventListener('click', async (ev) => {
+/* ---- click-to-push over the envelope protocol (continuous command) ---- */
+cv.addEventListener('click', (ev) => {
   const r = cv.getBoundingClientRect();
-  const x = (ev.clientX - r.left) * (cv.width / r.width);
-  const y = (ev.clientY - r.top) * (cv.height / r.height);
-  const resp = await fetch('/click', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({x, y, push: document.getElementById('push').checked}),
+  Director.send('pointer.click', {
+    x: (ev.clientX - r.left) * (cv.width / r.width),
+    y: (ev.clientY - r.top) * (cv.height / r.height),
+    push: document.getElementById('push').checked,
   });
-  if (!resp.ok) { console.log('click rejected', resp.status); return; }
-  const data = await resp.json();
-  console.log('click', data);
+});
+Director.on('click.result', env => {
+  const data = env.payload;
   if (data.reprojected) {
     const color = data.pushed ? '#57ab5a' : (data.hit_world ? '#e5534b' : '#539bf5');
     dots.push({x: data.reprojected[0], y: data.reprojected[1], color,
@@ -115,24 +167,19 @@ cv.addEventListener('click', async (ev) => {
   }
 });
 
-async function post(path, body) {
-  const resp = await fetch(path, {method: 'POST',
-    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
-  if (!resp.ok) { alert(`${path}: ${resp.status} ${(await resp.json()).detail || ''}`); }
-  return resp.ok;
-}
-
-document.getElementById('start').onclick = () => post('/session/start', {
+/* ---- session commands (state-intent envelopes) ---- */
+document.getElementById('start').onclick = () => Director.send('session.start', {
   task_id: +document.getElementById('task').value,
   seed: +document.getElementById('seed').value,
   instruction: document.getElementById('instr').value || null,
 });
-document.getElementById('reset').onclick = () => post('/session/reset', {
+document.getElementById('reset').onclick = () => Director.send('session.reset', {
   seed: +document.getElementById('seed').value,
   instruction: document.getElementById('instr').value || null,
 });
-document.getElementById('stop').onclick = () => post('/session/stop');
+document.getElementById('stop').onclick = () => Director.send('session.stop', {});
 
+/* ---- status polling (plain HTTP, unchanged) ---- */
 async function poll() {
   try {
     const s = await (await fetch('/session')).json();
@@ -171,7 +218,6 @@ async function loadTasks() {
 }
 
 loadTasks();
-connect();
 poll();
 </script>
 </body>

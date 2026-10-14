@@ -19,6 +19,7 @@ import paths
 from live.session import LiveSession
 
 INDEX_HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+XRAY_JS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xray.js")
 
 DEFAULT_CHECKPOINT = os.path.join(
     paths.CKPTS_DIR, "octo_finetune", "libero_spatial",
@@ -66,6 +67,11 @@ class ClickRequest(BaseModel):
 @app.get("/")
 async def index():
     return FileResponse(INDEX_HTML)
+
+
+@app.get("/xray.js")
+async def xray_js():
+    return FileResponse(XRAY_JS, media_type="application/javascript")
 
 
 @app.get("/tasks")
@@ -128,20 +134,67 @@ def click(req: ClickRequest):
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket):
+    """One socket, three concerns:
+      - binary JPEG frames out (each preceded by a "frame.meta" envelope),
+        newest-frame-only, slow clients drop;
+      - X-Ray event envelopes out (JSON text) via a per-client queue;
+      - command envelopes in (JSON text) with state-intent dedupe and
+        latest-wins continuous semantics (live/protocol.py).
+    """
+    import time as _time
+
+    from live import protocol
+
     await websocket.accept()
     session = app.state.session
     hub = session.hub
     cid = hub.register()
-    last_id = 0
-    try:
+    loop = asyncio.get_running_loop()
+    events = asyncio.Queue()
+    hub.register_events(cid, loop, events)
+
+    def emit_error(msg):
+        hub.broadcast_event(protocol.encode(
+            "error", {"detail": msg[:300]}, "server"))
+
+    router = protocol.CommandRouter()
+
+    def _safe(fn):
+        def wrapped(payload, msg):
+            try:
+                fn(payload, msg)
+            except (RuntimeError, ValueError, KeyError) as e:
+                emit_error(f"{msg['type']}: {e}")
+        return wrapped
+
+    router.register("xray.toggle", _safe(
+        lambda p, m: session.xray.toggle(p["overlay"], bool(p["enabled"]))))
+    router.register("session.start", _safe(
+        lambda p, m: session.request_start(int(p["task_id"]),
+                                           int(p.get("seed") or 0),
+                                           p.get("instruction"))))
+    router.register("session.reset", _safe(
+        lambda p, m: session.request_reset(
+            p.get("task_id"), p.get("seed"), p.get("instruction"))))
+    router.register("session.stop", _safe(lambda p, m: session.request_stop()))
+
+    def _click(p, m):
+        res = session.handle_click(float(p["x"]), float(p["y"]),
+                                   bool(p.get("push", True)))
+        res["in_reply_to"] = m["id"]
+        hub.broadcast_event(protocol.encode("click.result", res, "server"))
+
+    router.register("pointer.click", _safe(_click))
+
+    async def frame_sender():
+        last_id = 0
         while True:
-            # newest-frame-only: wait for a frame newer than the last one sent;
-            # anything skipped in between counts as dropped for this client
             fid, jpeg, ts = await asyncio.to_thread(hub.wait_newer, last_id)
             if fid == last_id:
                 continue
-            import time
-            age = time.time() - ts
+            age = _time.time() - ts
+            await websocket.send_text(protocol.encode(
+                "frame.meta", {"frame_id": fid, "ts": ts}, "server"))
             await websocket.send_bytes(jpeg)
             stats = hub.clients[cid]
             if last_id:
@@ -150,7 +203,31 @@ async def ws(websocket: WebSocket):
             stats["age_sum"] += age
             stats["age_max"] = max(stats["age_max"], age)
             last_id = fid
+
+    async def event_sender():
+        while True:
+            await websocket.send_text(await events.get())
+
+    async def cmd_receiver():
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = protocol.parse(raw)
+            except protocol.ProtocolError as e:
+                emit_error(f"bad envelope: {e}")
+                continue
+            await asyncio.to_thread(router.handle, msg)
+            await asyncio.to_thread(router.drain_continuous)
+
+    tasks = [asyncio.create_task(f()) for f in
+             (frame_sender, event_sender, cmd_receiver)]
+    try:
+        done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_EXCEPTION)
+        for t in pending:
+            t.cancel()
     except (WebSocketDisconnect, RuntimeError):
-        pass
+        for t in tasks:
+            t.cancel()
     finally:
         hub.unregister(cid)

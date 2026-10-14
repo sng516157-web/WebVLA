@@ -10,3 +10,5 @@ reference/episodes/
 deploy/_staging/
 deploy/_staging_pi05/
 native_libs/
+logs_*.log
+live/xray_bundles/
