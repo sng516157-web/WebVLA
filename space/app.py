@@ -173,7 +173,12 @@ def infer_chunk(img, wrist, state, instruction, xray=False):
 
 
 # ---------------------------------------------------------------- episode
-def _save_episode(task_id, seed, frames, meta, combo_frames=None):
+# X-Ray side-by-side cells, in UI replay-row order
+PANEL_CELLS = ["bars", "timeline", "path", "denoise", "heatmap"]
+
+
+def _save_episode(task_id, seed, frames, meta, combo_frames=None,
+                  panel_frames=None):
     import imageio.v2 as imageio
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -193,6 +198,17 @@ def _save_episode(task_id, seed, frames, meta, combo_frames=None):
             writer.append_data(f)
         writer.close()
         meta["xray_mp4"] = combo
+    if panel_frames:
+        # each panel as its own mp4 (same frame count) for individual replay
+        meta["xray_panels_mp4"] = {}
+        for name, pframes in panel_frames.items():
+            fn = f"{base}.xray.{name}.mp4"
+            writer = imageio.get_writer(os.path.join(EPISODES_DIR, fn),
+                                        fps=30)
+            for f in pframes:
+                writer.append_data(f)
+            writer.close()
+            meta["xray_panels_mp4"][name] = fn
     with open(os.path.join(EPISODES_DIR, base + ".json"), "w") as f:
         json.dump(meta, f, indent=2)
     return mp4
@@ -213,7 +229,9 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
     xray = bool(xray_overlays)
     panels = xray and display_mode == "Side-by-side video"
     if task_id is None:
-        yield (None, None, "", "Pick a task first.")
+        yield (None, None, "", "Pick a task first.",
+               gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
+               gr.skip())
         return
     task_id, seed = int(task_id), int(seed or 0)
     custom = (custom_instruction or "").strip() or None
@@ -241,6 +259,7 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
     frames = [env.render("agentview")]
     combo_frames = []  # side-by-side video frames (panels mode only)
     panel_state = {}   # latest rendered panel image per cell name
+    panel_frames = {}  # cell name -> [rgb per frame] for individual replay
     latencies = []
     ticks = []  # X-Ray replan timeline: inference ms per tick
     trail = []  # X-Ray panels: executed gripper xy per step
@@ -291,8 +310,7 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
                     if heat is not None:
                         panel_state["heatmap"] = renderer.heatmap(heat)
                     if den_world is not None:
-                        panel_state["denoise"] = renderer.denoise(
-                            [w[:, :2] for w in den_world])
+                        panel_state["denoise"] = renderer.denoise(den_world)
                 else:
                     project = make_projector(env)
                     if wps_world is not None:
@@ -304,7 +322,7 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
                 _, _, done, _ = env.step(a)
                 if panels and "Action path" in xray_overlays:
                     trail.append(np.asarray(env._raw["robot0_eef_pos"],
-                                            dtype=np.float64)[:2].copy())
+                                            dtype=np.float64).copy())
                 frame = env.render("agentview")
                 if xray and not panels:
                     frame = composite(
@@ -325,7 +343,9 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
                         panel_state["bars"] = renderer.bars(a)
                     if "Action path" in xray_overlays:
                         panel_state["path"] = renderer.path(
-                            wps_world[:, :2], trail, eef[:2])
+                            wps_world, trail, eef)
+                    for name, img in panel_state.items():
+                        panel_frames.setdefault(name, []).append(img)
                     combo_frames.append(compose_combo(frame, panel_state))
                 if done:
                     break
@@ -334,14 +354,17 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
             yield (None, combo_frames[-1] if panels else frames[-1],
                    f"running — step {env.steps}/{max_steps}, "
                    f"chunk {len(latencies)}, last inference "
-                   f"{latencies[-1]:.0f} ms", "")
+                   f"{latencies[-1]:.0f} ms", "",
+                   gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
+                   gr.skip())
     except Exception as e:
         tb = traceback.format_exc()
         msg = str(e)
         meta.update(success=False, steps=env.steps, error=tb,
                     wall_time_s=round(time.time() - t_start, 2))
         mp4 = _save_episode(task_id, seed, frames, meta,
-                            combo_frames=combo_frames if panels else None)
+                            combo_frames=combo_frames if panels else None,
+                            panel_frames=panel_frames if panels else None)
         if "quota" in msg.lower() or "zerogpu" in msg.lower():
             gr.Warning(f"ZeroGPU quota exhausted — {msg[:200]}")
             note = f"### OUT OF GPU QUOTA\n{msg[:300]}"
@@ -350,7 +373,9 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
         if renderer is not None:
             renderer.close()
         yield (mp4, combo_frames[-1] if panels and combo_frames
-               else frames[-1], note, _badge(meta))
+               else frames[-1], note, _badge(meta),
+               gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
+               gr.skip())
         return
 
     success = env.check_success()
@@ -360,13 +385,18 @@ def run_episode(task_id, seed, custom_instruction, xray_overlays=None,
                 latency_mean_ms=round(float(np.mean(latencies)), 1),
                 replan_latencies_ms=[round(x, 1) for x in latencies])
     mp4 = _save_episode(task_id, seed, frames, meta,
-                        combo_frames=combo_frames if panels else None)
+                        combo_frames=combo_frames if panels else None,
+                        panel_frames=panel_frames if panels else None)
     if renderer is not None:
         renderer.close()
     out = os.path.join(EPISODES_DIR, meta["xray_mp4"]) if (
         panels and meta.get("xray_mp4")) else mp4
+    panel_vids = meta.get("xray_panels_mp4", {})
     yield (out, combo_frames[-1] if panels and combo_frames else frames[-1],
-           "done", _badge(meta))
+           "done", _badge(meta),
+           gr.update(visible=bool(panel_vids)),
+           *[os.path.join(EPISODES_DIR, panel_vids[c])
+             if c in panel_vids else gr.skip() for c in PANEL_CELLS])
 
 
 def _badge(meta):
@@ -494,7 +524,8 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
             "**Display:** *In the video* draws everything onto the frames; "
             "*Side-by-side video* keeps the sim view clean and puts live "
             "plots next to it — the recording replays plots and episode "
-            "in sync (the gallery keeps the clean version).")
+            "in sync (the gallery keeps the clean version), and each plot "
+            "also gets its own replayable video under the episode.")
     xray_display = gr.Radio(
         ["In the video", "Side-by-side video"], value="In the video",
         label="X-Ray display")
@@ -504,6 +535,12 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
                             interactive=False)
         out_video = gr.Video(label="episode")
     result_md = gr.Markdown("")
+    with gr.Row(visible=False) as replay_row:
+        v_bars = gr.Video(label="action bars", height=200)
+        v_time = gr.Video(label="replan timeline", height=200)
+        v_path = gr.Video(label="plan view (3D)", height=200)
+        v_den = gr.Video(label="denoising", height=200)
+        v_heat = gr.Video(label="attention heatmap", height=200)
     gr.Markdown("### Past episodes (this container only)")
     gallery_df = gr.Dataframe(
         headers=["task", "seed", "success", "steps", "wall s",
@@ -520,7 +557,8 @@ with gr.Blocks(title="WebVLA — π0.5 LIBERO demo") as demo:
     task_dd.change(_scene, task_dd, scene_img)
     run_btn.click(run_episode, [task_dd, seed_nb, custom_tb, xray_cb,
                                 xray_display],
-                  [out_video, live_img, status_md, result_md]
+                  [out_video, live_img, status_md, result_md,
+                   replay_row, v_bars, v_time, v_path, v_den, v_heat]
                   ).then(lambda: _gallery_rows(), None, gallery_df)
     gallery_df.select(_gallery_select, None, gallery_video)
     refresh_btn = gr.Button("Refresh gallery")

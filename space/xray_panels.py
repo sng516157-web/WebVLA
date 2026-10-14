@@ -21,7 +21,7 @@ CELL_W, CELL_H = 288, 216
 CELL_ORDER = ["sim", "path", "denoise", "bars", "timeline", "heatmap"]
 CELL_TITLES = {
     "sim": "simulation",
-    "path": "plan view (top-down)",
+    "path": "plan view (3D)",
     "denoise": "denoising convergence",
     "bars": "action bars",
     "timeline": "replan timeline",
@@ -82,35 +82,70 @@ class PanelRenderer:
         ax.set_ylabel("inference ms", fontsize=7)
         return self._to_rgb(fig)
 
-    def path(self, plan_xy, trail_xy, eef_xy):
+    @staticmethod
+    def _trusted_limits(ax, anchors):
+        """Frame the 3D axes on the physically-realized region (executed
+        trail, gripper) with padding — never on the full imagined chunk,
+        whose unvisited tail drifts meters away under distribution shift
+        and would squash the readable region to a dot. Imagined points
+        outside the box clip at the axes — the honest equivalent of the
+        video overlay leaving the frame."""
+        pts = np.asarray([p for a in anchors if a is not None
+                          for p in np.atleast_2d(a)], dtype=float)
+        if len(pts) == 0:
+            return
+        lo, hi = pts.min(axis=0), pts.max(axis=0)
+        span = np.maximum(hi - lo, 0.25)
+        pad = 0.05
+        ax.set_xlim(lo[0] - pad, lo[0] + span[0] + pad)
+        ax.set_ylim(lo[1] - pad, lo[1] + span[1] + pad)
+        ax.set_zlim(lo[2] - pad, lo[2] + span[2] + pad)
+        ax.set_box_aspect((span[0] + 2 * pad, span[1] + 2 * pad,
+                           span[2] + 2 * pad))
+
+    def path(self, plan_xyz, trail_xyz, eef_xyz):
+        """3D view: the imagined 50-step plan vs the path actually executed
+        this episode, plus the gripper now. Fixed perspective."""
         fig = self._fig("path")
-        ax = self._ax(fig, "plan view, top-down (world xy, m)")
-        if trail_xy is not None and len(trail_xy) > 1:
-            t = np.asarray(trail_xy)
-            ax.plot(t[:, 0], t[:, 1], "-", color="#57ab5a", lw=2,
+        ax = fig.add_axes([0.0, 0.0, 1.0, 0.88], projection="3d")
+        ax.set_title("plan view (3D, world m)", fontsize=8)
+        if trail_xyz is not None and len(trail_xyz) > 1:
+            t = np.asarray(trail_xyz)
+            ax.plot(t[:, 0], t[:, 1], t[:, 2], "-", color="#57ab5a", lw=2,
                     label="executed")
-        if plan_xy is not None and len(plan_xy) > 1:
-            p = np.asarray(plan_xy)
-            ax.plot(p[:, 0], p[:, 1], ".-", color="#539bf5", lw=1.5,
-                    ms=3, label="imagined plan (50)")
-        if eef_xy is not None:
-            ax.plot(*eef_xy, "o", color="#e05d38", ms=7, label="gripper")
-        ax.legend(fontsize=6, loc="best")
-        ax.set_aspect("equal")
+        if plan_xyz is not None and len(plan_xyz) > 1:
+            p = np.asarray(plan_xyz)
+            ax.plot(p[:, 0], p[:, 1], p[:, 2], ".-", color="#539bf5",
+                    lw=1.5, ms=3, label="imagined plan (50)")
+        if eef_xyz is not None:
+            ax.scatter(*eef_xyz, color="#e05d38", s=40, label="gripper")
+        ax.legend(fontsize=6, loc="upper left")
+        self._trusted_limits(ax, [trail_xyz, eef_xyz,
+                                  plan_xyz[:2] if plan_xyz is not None
+                                  else None])
+        ax.view_init(elev=25, azim=-60)
+        ax.tick_params(labelsize=5)
         return self._to_rgb(fig)
 
-    def denoise(self, trajs_xy):
+    def denoise(self, trajs_xyz):
+        """3D view: the 10 flow-matching estimates of the same plan,
+        faint -> solid."""
         fig = self._fig("denoise")
-        ax = self._ax(fig, "denoising: 10 refinements of the plan (world xy)")
-        n = len(trajs_xy)
-        for i, xy in enumerate(trajs_xy):
-            if len(xy) < 2:
+        ax = fig.add_axes([0.0, 0.0, 1.0, 0.88], projection="3d")
+        ax.set_title("denoising: 10 refinements of the plan (3D)", fontsize=8)
+        n = len(trajs_xyz)
+        for i, xyz in enumerate(trajs_xyz):
+            if len(xyz) < 2:
                 continue
-            t = np.asarray(xy)
+            t = np.asarray(xyz)
             alpha = 0.15 + 0.85 * (i / max(n - 1, 1))
-            ax.plot(t[:, 0], t[:, 1], "-", color=(0.86, 0.31, 0.78, alpha),
+            ax.plot(t[:, 0], t[:, 1], t[:, 2], "-",
+                    color=(0.86, 0.31, 0.78, alpha),
                     lw=2 if i == n - 1 else 1)
-        ax.set_aspect("equal")
+        anchor = trajs_xyz[-1][:2] if n and len(trajs_xyz[-1]) else None
+        self._trusted_limits(ax, [anchor])
+        ax.view_init(elev=25, azim=-60)
+        ax.tick_params(labelsize=5)
         return self._to_rgb(fig)
 
     def heatmap(self, grid):
